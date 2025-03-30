@@ -1,0 +1,193 @@
+{
+  "main": {
+    "id": "60a5caad03fa6a42",
+    "type": "split",
+    "children": [
+      {
+        "id": "b6e1f22eebd70e9d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "aeddae6e8d326c2b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "GIT_BRANCH_GUIDE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "GIT_BRANCH_GUIDE"
+            }
+          },
+          {
+            "id": "1afa7c58980e8d12",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "GIT_BRANCH_GUIDE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "GIT_BRANCH_GUIDE"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9ccf1b245ceda568",
+    "type": "split",
+    "children": [
+      {
+        "id": "ec90e940e951242c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c3cdcdeff790c54e",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "파일 탐색기"
+            }
+          },
+          {
+            "id": "a8adbf957c5efb37",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "검색"
+            }
+          },
+          {
+            "id": "f5c256ce103f5ec0",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "북마크"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "55f543d3d38b3bc9",
+    "type": "split",
+    "children": [
+      {
+        "id": "c5ce04387fabb297",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4ae8ead91c86651b",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "GIT_BRANCH_GUIDE.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "GIT_BRANCH_GUIDE 의 백링크"
+            }
+          },
+          {
+            "id": "2e529c6126d1667a",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "GIT_BRANCH_GUIDE.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "GIT_BRANCH_GUIDE 의 나가는 링크"
+            }
+          },
+          {
+            "id": "d29d74eb2ddf751c",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "태그"
+            }
+          },
+          {
+            "id": "f948be9c1bac1459",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "GIT_BRANCH_GUIDE.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "GIT_BRANCH_GUIDE 의 개요"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:빠른 전환기 열기": false,
+      "graph:그래프 뷰 열기": false,
+      "canvas:새 캔버스 만들기": false,
+      "daily-notes:오늘의 일일 노트 열기": false,
+      "templates:템플릿 삽입": false,
+      "command-palette:명령어 팔레트 열기": false
+    }
+  },
+  "active": "1afa7c58980e8d12",
+  "lastOpenFiles": [
+    "📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계.md",
+    "🛠️ Troubleshooting_Log.md",
+    "📊 FPS Game Server Project.md",
+    "GIT_BRANCH_GUIDE.md"
+  ]
+}
