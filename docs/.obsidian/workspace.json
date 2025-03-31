@@ -11,13 +11,74 @@
             "id": "1afa7c58980e8d12",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "🛠️ Troubleshooting_Log.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "새 탭"
+              "title": "🛠️ Troubleshooting_Log"
+            }
+          },
+          {
+            "id": "684eb7cf0e17217b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Main/🛠️ Troubleshooting_Log.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "🛠️ Troubleshooting_Log"
+            }
+          },
+          {
+            "id": "261e0a75d62e05f0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Main/🌿 Git 브랜치 네이밍 규칙.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "🌿 Git 브랜치 네이밍 규칙"
+            }
+          },
+          {
+            "id": "a6d9e16e541f2125",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Main/📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계"
+            }
+          },
+          {
+            "id": "cba8c2fd470660b3",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Main/🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL).md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL)"
             }
           }
-        ]
+        ],
+        "currentTab": 4
       }
     ],
     "direction": "vertical"
@@ -90,6 +151,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL).md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,7 +161,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "백링크"
+              "title": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL) 의 백링크"
             }
           },
           {
@@ -108,11 +170,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL).md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "나가는 링크"
+              "title": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL) 의 나가는 링크"
             }
           },
           {
@@ -136,13 +199,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "GIT_BRANCH_GUIDE.md",
+                "file": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL).md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "GIT_BRANCH_GUIDE 의 개요"
+              "title": "🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL) 의 개요"
             }
           }
         ]
@@ -162,11 +225,14 @@
       "command-palette:명령어 팔레트 열기": false
     }
   },
-  "active": "c3cdcdeff790c54e",
+  "active": "cba8c2fd470660b3",
   "lastOpenFiles": [
-    "📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계.md",
+    "Main/🛠️ Troubleshooting_Log.md",
+    "Main/🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL).md",
     "📊 FPS Game Server Project.md",
-    "GIT_BRANCH_GUIDE.md",
-    "🛠️ Troubleshooting_Log.md"
+    "Main/🌿 Git 브랜치 네이밍 규칙.md",
+    "Main/📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계.md",
+    "Chat Server CMake.ver.md",
+    "Main"
   ]
 }
