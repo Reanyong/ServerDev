@@ -5,30 +5,44 @@
 #include <boost/asio.hpp>
 #include <iostream>
 
-using tcp = boost::asio::ip::tcp;
+namespace beast = boost::beast;
 namespace websocket = boost::beast::websocket;
+namespace net = boost::asio;
+using tcp = net::ip::tcp;
 
 int main()
 {
-	try {
+	try
+	{
+		net::io_context ioc;
+		tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 8080));
 
+		std::cout << "[ChatServer] Listening on port 8080..." << std::endl;
 
-		boost::asio::io_context ioc;
+		tcp::socket socket(ioc);
+		acceptor.accept(socket);
 
-		tcp::acceptor acceptor(ioc, { tcp::v4(), 8080 });
-		for (;;)
-		{
-			// This will receive the new connection
-			tcp::socket socket(ioc);
-			// Block until we get a connection
-			acceptor.accept(socket);
-			// Launch the session, transferring ownership of the socket
-			std::thread{ std::bind(&do_session, std::move(socket)) }.detach();
+		websocket::stream<tcp::socket> ws(std::move(socket));
+		ws.accept();
+
+		std::cout << "[Session] WebSocket connected." << std::endl;
+
+		for (;;) {
+			beast::flat_buffer buffer;
+			ws.read(buffer);
+
+			std::string message = beast::buffers_to_string(buffer.data());
+			std::cout << "[Recv] " << message << std::endl;
+
+			ws.text(ws.got_text());
+			ws.write(net::buffer(message));
 		}
 	}
-	catch (std::exception const& e)
+	catch (const std::exception& e)
 	{
 		std::cerr << "Error: " << e.what() << std::endl;
-		return EXIT_FAILURE;
+	}
+
+	return 0;
 }
 
