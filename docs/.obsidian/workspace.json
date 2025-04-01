@@ -170,11 +170,11 @@
   },
   "active": "6f55edb9f39ea613",
   "lastOpenFiles": [
-    "Main/🛠️ Troubleshooting_Log.md",
     "doc/server/chat/step01_basic_echo.md",
-    "doc",
     "doc/server/chat",
     "doc/server",
+    "doc",
+    "Main/🛠️ Troubleshooting_Log.md",
     "Main/📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계.md",
     "Main/🌿 Git 브랜치 네이밍 규칙.md",
     "Main/🗄️ FPS 게임 서버 DB 스키마 (PostgreSQL).md",
