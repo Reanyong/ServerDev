@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket 한글 테스트</title>
+</head>
+<body>
+    <h2>WebSocket 에코 테스트 (한글 지원)</h2>
+    <input type="text" id="message" placeholder="메시지 입력 (한글 가능)">
+    <button onclick="sendMessage()">전송</button>
+    <div id="output"></div>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8080');
+        
+        socket.onopen = function(e) {
+            document.getElementById('output').innerHTML += '<p>서버에 연결되었습니다.</p>';
+        };
+        
+        socket.onmessage = function(event) {
+            document.getElementById('output').innerHTML += 
+                `<p>서버로부터 메시지: ${event.data}</p>`;
+        };
+        
+        socket.onerror = function(error) {
+            document.getElementById('output').innerHTML += 
+                `<p>에러 발생: ${error}</p>`;
+        };
+        
+        function sendMessage() {
+            const messageInput = document.getElementById('message');
+            const message = messageInput.value;
+            
+            if (message) {
+                socket.send(message);
+                document.getElementById('output').innerHTML += 
+                    `<p>보낸 메시지: ${message}</p>`;
+                messageInput.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
