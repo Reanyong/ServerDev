@@ -28,15 +28,15 @@
 
 ## 📈 통합 기술 스택 설계
 
-|기능|기술 스택|설명|
-|---|---|---|
-|API Server|C++ + RESTful API (Boost.Beast) + gRPC|유저 인증, 랭킹, 게임 상태 등 요청/응답 처리|
-|Game Session Server|C++ + Boost.Asio UDP + gRPC|저지연 전장 동기화, 실시간 상태 처리|
-|Chat Server|C++ + Boost.Beast WebSocket + Asio|실시간 채팅 메시지 처리 및 브로드캐스트|
-|DB 처리|C++ + libpqxx + PostgreSQL|유저, 전투, 채팅 기록 저장|
-|캐시/이벤트 처리|Redis / Kafka|실시간 이벤트 브로드캐스트 및 캐싱|
-|파일 저장|AWS S3 + C++ SDK|프로필, 리플레이 저장 등 정적 자원|
-|서버리스 처리|AWS Lambda + C++|랭킹 계산, 리포트 생성 등 경량 작업|
+| 기능                  | 기술 스택                                  | 설명                          |
+| ------------------- | -------------------------------------- | --------------------------- |
+| API Server          | C++ + RESTful API (Boost.Beast) + gRPC | 유저 인증, 랭킹, 게임 상태 등 요청/응답 처리 |
+| Game Session Server | C++ + Boost.Asio UDP + gRPC            | 저지연 전장 동기화, 실시간 상태 처리       |
+| Chat Server         | C++ + Boost.Beast WebSocket + Asio     | 실시간 채팅 메시지 처리 및 브로드캐스트      |
+| DB 처리               | C++ + libpqxx + PostgreSQL             | 유저, 전투, 채팅 기록 저장            |
+| 캐시/이벤트 처리           | Redis / Kafka                          | 실시간 이벤트 브로드캐스트 및 캐싱         |
+| 파일 저장               | AWS S3 + C++ SDK                       | 프로필, 리플레이 저장 등 정적 자원        |
+| 서버리스 처리             | AWS Lambda + C++                       | 랭킹 계산, 리포트 생성 등 경량 작업       |
 
 ---
 
