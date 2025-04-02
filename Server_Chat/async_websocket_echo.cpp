@@ -1,144 +1,192 @@
+ï»¿// **#**
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/asio.hpp>
 #include <iostream>
 #include <memory>
 #include <Windows.h>
+#include <io.h>
+#include <fcntl.h>
 
-namespace beast = boost::beast;         // from <boost/beast.hpp>
-namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
-namespace net = boost::asio;            // from <boost/asio.hpp>
-using tcp = net::ip::tcp;               // from <boost/asio/ip/tcp.hpp>
-using namespace std;                    // for convenience
+namespace beast = boost::beast;
+namespace websocket = beast::websocket;
+namespace net = boost::asio;
+using tcp = net::ip::tcp;
+using namespace std;
 
+// UTF-8 ë¬¸ìì—´ì„ ì™€ì´ë“œ ë¬¸ìì—´ë¡œ ë³€í™˜
 wstring utf8_to_wstring(const string& str)
 {
-	if (str.empty()) return wstring();
-
-	// ¹öÆÛ Å©±â °è»ê
-	int size_need = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
-
-	// ¹öÆÛ ÇÒ´ç
-	wstring result(size_need, 0);
-	MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &result[0], size_need);
-
-	return result;
+    if (str.empty()) return wstring();
+    int size_need = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
+    wstring result(size_need, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &result[0], size_need);
+    return result;
 }
 
+// ì½˜ì†”ì— ë©”ì‹œì§€ ì¶œë ¥
+void ConsoleOut(const wstring& message)
+{
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD dwWritten = 0;
+    WriteConsoleW(hConsole, message.c_str(), (DWORD)message.length(), &dwWritten, NULL);
+    WriteConsoleW(hConsole, L"\r\n", 2, &dwWritten, NULL);
+}
+
+// ì½˜ì†”ì— ì—ëŸ¬ ë©”ì‹œì§€ ì¶œë ¥
+void ConsoleErr(const wstring& message)
+{
+    HANDLE hConsole = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD dwWritten = 0;
+    WriteConsoleW(hConsole, message.c_str(), (DWORD)message.length(), &dwWritten, NULL);
+    WriteConsoleW(hConsole, L"\r\n", 2, &dwWritten, NULL);
+}
+
+// ì„¸ì…˜ í´ë˜ìŠ¤
 class Session : public enable_shared_from_this<Session>
 {
 private:
-	websocket::stream<beast::tcp_stream> ws_;
-	beast::flat_buffer buffer_;
+    websocket::stream<beast::tcp_stream> ws_;
+    beast::flat_buffer buffer_;
 
 public:
-	// ¼ÒÄÏÀ» ¹Ş¾Æ ¼¼¼Ç »ı¼º
-	explicit Session(tcp::socket socket)
-		: ws_(move(socket))
-	{
-	}
+    // ì†Œì¼“ì„ ë°›ì•„ ì„¸ì…˜ ìƒì„±
+    explicit Session(tcp::socket socket)
+        : ws_(move(socket))
+    {
+    }
 
-	void start()
-	{
-		// ºñµ¿±âÀûÀ¸·Î À¥¼ÒÄÏ ÇÚµå¼ÎÀÌÅ© ¼öÇà
-		ws_.async_accept(
-			beast::bind_front_handler(
-				&Session::on_accept,
-				shared_from_this()));
-	}
+    void start()
+    {
+        // ë¹„ë™ê¸°ì ìœ¼ë¡œ ì›¹ì†Œì¼“ í•¸ë“œì…°ì´í¬ ìˆ˜í–‰
+        ws_.async_accept(
+            beast::bind_front_handler(
+                &Session::on_accept,
+                shared_from_this()));
+    }
 
 private:
-	// À¥¼ÒÄÏ ¿¬°á ÈÄ Äİ¹é
-	void on_accept(beast::error_code ec)
-	{
-		if (ec) {
-			wcerr << L"[Session] WebSocket ¿¬°á ½ÇÆĞ: " << utf8_to_wstring(ec.message()) << endl;
-			return;
-		}
+    // ì›¹ì†Œì¼“ ì—°ê²° í›„ ì½œë°±
+    void on_accept(beast::error_code ec)
+    {
+        if (ec) {
+            ConsoleErr(L"[Session] WebSocket ì—°ê²° ì‹¤íŒ¨: " + utf8_to_wstring(ec.message()));
+            return;
+        }
 
-		wcout << L"[Session] WebSocket ¿¬°á ¼º°ø" << endl;
+        ConsoleOut(L"[Session] WebSocket ì—°ê²° ì„±ê³µ");
 
-		// ºñµ¿±âÀûÀ¸·Î µ¥ÀÌÅÍ ¼ö½Å ´ë±â
-		do_read();
-	}
+        // ë¹„ë™ê¸°ì ìœ¼ë¡œ ë°ì´í„° ìˆ˜ì‹  ëŒ€ê¸°
+        do_read();
+    }
 
-	// ºñµ¿±âÀûÀ¸·Î ¸Ş½ÃÁö ÀĞ±â
-	void do_read() {
-		ws_.async_read(
-			buffer_,
-			beast::bind_front_handler(
-				&Session::on_read,
-				shared_from_this()));
-	}
+    // ë¹„ë™ê¸°ì ìœ¼ë¡œ ë©”ì‹œì§€ ì½ê¸°
+    void do_read() {
+        ws_.async_read(
+            buffer_,
+            beast::bind_front_handler(
+                &Session::on_read,
+                shared_from_this()));
+    }
 
-	// ¸Ş½ÃÁö ÀĞ±â ¿Ï·á ÈÄ È£ÃâµÇ´Â Äİ¹é
-	void on_read(beast::error_code ec, size_t bytes_transferred) {
-		boost::ignore_unused(bytes_transferred);
+    // ë©”ì‹œì§€ ì½ê¸° ì™„ë£Œ í›„ í˜¸ì¶œë˜ëŠ” ì½œë°±
+    void on_read(beast::error_code ec, size_t bytes_transferred) {
+        boost::ignore_unused(bytes_transferred);
 
-		// ¿À·ù Ã³¸®
-		if (ec) {
-			if (ec == websocket::error::closed) {
-				wcout << L"[Session] WebSocket closed." << endl;
-			}
-			else {
-				wcerr << L"[Error] Read: " << utf8_to_wstring(ec.message()) << endl;
-			}
-			return;
-		}
+        // ì˜¤ë¥˜ ì²˜ë¦¬
+        if (ec) {
+            if (ec == websocket::error::closed) {
+                ConsoleOut(L"[Session] í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ì¢…ë£Œ");
+            }
+            else {
+                ConsoleErr(L"[Error] Read: " + utf8_to_wstring(ec.message()));
+            }
+            return;
+        }
 
-		// ¼ö½ÅÇÑ ¸Ş½ÃÁö Ã³¸®
-		string message = beast::buffers_to_string(buffer_.data());
-		wcout << L"[Recv] " << utf8_to_wstring(message) << endl;
+        // ìˆ˜ì‹ í•œ ë©”ì‹œì§€ ì²˜ë¦¬
+        string message = beast::buffers_to_string(buffer_.data());
+        ConsoleOut(L"[Recv] " + utf8_to_wstring(message));
 
-		// ¿¡ÄÚ ÀÀ´ä (ºñµ¿±âÀûÀ¸·Î ¸Ş½ÃÁö Àü¼Û)
-		ws_.text(ws_.got_text());
-		ws_.async_write(
-			buffer_.data(),
-			beast::bind_front_handler(
-				&Session::on_write,
-				shared_from_this()));
-	}
+        // ì—ì½” ì‘ë‹µ (ë¹„ë™ê¸°ì ìœ¼ë¡œ ë©”ì‹œì§€ ì „ì†¡)
+        ws_.text(ws_.got_text());
+        ws_.async_write(
+            buffer_.data(),
+            beast::bind_front_handler(
+                &Session::on_write,
+                shared_from_this()));
+    }
 
-	// ¸Ş½ÃÁö ¾²±â ¿Ï·á ÈÄ È£ÃâµÇ´Â Äİ¹é
-	void on_write(beast::error_code ec, size_t bytes_transferred) {
-		boost::ignore_unused(bytes_transferred);
+    // ë©”ì‹œì§€ ì“°ê¸° ì™„ë£Œ í›„ í˜¸ì¶œë˜ëŠ” ì½œë°±
+    void on_write(beast::error_code ec, size_t bytes_transferred) {
+        boost::ignore_unused(bytes_transferred);
 
-		if (ec) {
-			wcerr << L"[Error] Write: " << utf8_to_wstring(ec.message()) << endl;
-			return;
-		}
+        if (ec) {
+            ConsoleErr(L"[Error] Write: " + utf8_to_wstring(ec.message()));
+            return;
+        }
 
-		// ¹öÆÛ ºñ¿ì±â
-		buffer_.consume(buffer_.size());
+        // ë²„í¼ ë¹„ìš°ê¸°
+        buffer_.consume(buffer_.size());
 
-		// ´ÙÀ½ ¸Ş½ÃÁö ÀĞ±â
-		do_read();
-	}
+        // ë‹¤ìŒ ë©”ì‹œì§€ ì½ê¸°
+        do_read();
+    }
 };
 
-int main() {
-	try {
-		SetConsoleOutputCP(CP_UTF8);
+// ë¹„ë™ê¸° ì—°ê²° ìˆ˜ë½ì„ ì²˜ë¦¬
+void handle_new_connection(const shared_ptr<tcp::acceptor>& acceptor,
+    const shared_ptr<net::io_context>& ioc) {
+    acceptor->async_accept(
+        [acceptor, ioc](beast::error_code ec, tcp::socket socket) {
+            if (!ec) {
+                ConsoleOut(L"[Server] ìƒˆ í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ìˆ˜ë½ë¨");
+                make_shared<Session>(move(socket))->start();
+            }
+            else {
+                ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
+            }
 
-		// io_context - Boost.AsioÀÇ ÇÙ½É Å¬·¡½º
-		net::io_context ioc;
-
-		// TCP ¼ö½Å±â ±âº» Æ÷Æ®
-		tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 8080));
-
-		// Å¬¶óÀÌ¾ğÆ® ¿¬°á ¼ö¶ô
-		tcp::socket socket(ioc);
-		acceptor.accept(socket);
-
-		// ¼¼¼Ç »ı¼º ¹× ½ÃÀÛ
-		make_shared<Session>(move(socket))->start();
-
-		// ºñµ¿±â ÀÛ¾÷ ½ÇÇà
-		ioc.run();
-	}
-	catch (const exception& e) {
-		cerr << e.what() << endl;
-	}
-
-	return 0;
+            handle_new_connection(acceptor, ioc);
+        });
 }
+
+int main() {
+    try {
+        // ì½˜ì†” ì„¤ì •
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+
+        // ì‹œì‘ ë©”ì‹œì§€
+        ConsoleOut(L"Server Start!! - Port 8080");
+
+        // IO ì»¨í…ìŠ¤íŠ¸ ìƒì„±
+        auto ioc = make_shared<net::io_context>();
+
+        // TCP ìˆ˜ì‹ ê¸° ìƒì„±
+        auto acceptor = make_shared<tcp::acceptor>(*ioc, tcp::endpoint(tcp::v4(), 8080));
+
+        ConsoleOut(L"í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ëŒ€ê¸° ì¤‘...");
+
+        // ì²« í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ìˆ˜ë½ (ë™ê¸°ì‹)
+        tcp::socket socket(*ioc);
+        acceptor->accept(socket);
+
+        ConsoleOut(L"ì²« í´ë¼ì´ì–¸íŠ¸ ì—°ê²°ë¨");
+
+        // ì„¸ì…˜ ìƒì„± ë° ì‹œì‘
+        make_shared<Session>(move(socket))->start();
+
+        // ë‹¤ìŒ ì—°ê²°ë“¤ì€ ë¹„ë™ê¸°ë¡œ ì²˜ë¦¬
+        handle_new_connection(acceptor, ioc);
+
+        // ë¹„ë™ê¸° ì‘ì—… ì‹¤í–‰
+        ioc->run();
+    }
+    catch (const exception& e) {
+        cerr << "Exception: " << e.what() << endl;
+    }
+
+    return 0;
+}
+// **#**
