@@ -15,7 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="echo_websocket.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="async_websocket_echo.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
