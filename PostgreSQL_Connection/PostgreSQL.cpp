@@ -46,7 +46,6 @@ int main() {
 		}
 		catch (const std::exception& e) {
 			cerr << "Warning on close: " << e.what() << endl;
-		}
 	}
 
 	catch (const exception& e) {
