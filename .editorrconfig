@@ -1,0 +1,16 @@
+# 최상위 설정 파일임을 표시
+root = true
+
+# 모든 파일에 적용
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+
+# C++ 파일에 대한 설정
+[*.{cpp,h,hpp}]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+cpp_generate_documentation_comments = xml
+cpp_encoding = utf-8-bom
