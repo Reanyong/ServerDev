@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 테스트 클라이언트</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        .connection-status {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status-disconnected {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .status-connected {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status-connecting {
+            background-color: #fff8e1;
+            color: #f57f17;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        input[type="text"] {
+            width: 70%;
+        }
+        input[type="number"] {
+            width: 80px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #1565c0;
+        }
+        button:disabled {
+            background-color: #bbdefb;
+            cursor: not-allowed;
+        }
+        .log-container {
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .log-sent {
+            color: #1976d2;
+        }
+        .log-received {
+            color: #2e7d32;
+        }
+        .log-error {
+            color: #c62828;
+        }
+        .log-info {
+            color: #6a1b9a;
+        }
+        .multi-test-controls {
+            display: flex;
+            align-items: center;
+            margin-top: 15px;
+            background-color: #f0f8ff;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket 테스트 클라이언트</h1>
+        
+        <div id="connection-status" class="connection-status status-disconnected">
+            연결 상태: 연결되지 않음
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="server-url" value="ws://localhost:8080" placeholder="WebSocket 서버 URL">
+            <button id="connect-btn">연결</button>
+            <button id="disconnect-btn" disabled>연결 끊기</button>
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="message" placeholder="보낼 메시지" disabled>
+            <button id="send-btn" disabled>전송</button>
+        </div>
+        
+        <!-- 추가: 다중 연결 테스트 컨트롤 -->
+        <div class="multi-test-controls">
+            <span class="label">다중 연결 테스트:</span>
+            <input type="number" id="connection-count" value="5" min="1" max="100">
+            <span class="label">개</span>
+            <button id="multi-connection-test-btn">테스트 시작</button>
+        </div>
+        
+        <h3>로그</h3>
+        <div id="log" class="log-container"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const sendBtn = document.getElementById('send-btn');
+        const messageInput = document.getElementById('message');
+        const serverUrlInput = document.getElementById('server-url');
+        const connectionStatus = document.getElementById('connection-status');
+        const logContainer = document.getElementById('log');
+        
+        // 다중 연결 테스트 요소
+        const connectionCountInput = document.getElementById('connection-count');
+        const multiConnectionTestBtn = document.getElementById('multi-connection-test-btn');
+        
+        // 로그 추가 함수
+        function addLog(message, type) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 연결 상태 업데이트 함수
+        function updateConnectionStatus(status, message) {
+            connectionStatus.className = `connection-status status-${status}`;
+            connectionStatus.textContent = `연결 상태: ${message}`;
+        }
+        
+        // 연결 버튼 클릭 이벤트
+        connectBtn.addEventListener('click', () => {
+            const serverUrl = serverUrlInput.value.trim();
+            if (!serverUrl) {
+                addLog('서버 URL을 입력하세요.', 'error');
+                return;
+            }
+            
+            try {
+                updateConnectionStatus('connecting', '연결 중...');
+                socket = new WebSocket(serverUrl);
+                
+                socket.onopen = () => {
+                    updateConnectionStatus('connected', '연결됨');
+                    addLog('서버에 연결되었습니다.', 'info');
+                    
+                    // 버튼 상태 업데이트
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                };
+                
+                socket.onmessage = (event) => {
+                    addLog(`수신: ${event.data}`, 'received');
+                };
+                
+                socket.onerror = (error) => {
+                    addLog('WebSocket 오류 발생', 'error');
+                    console.error('WebSocket 오류:', error);
+                };
+                
+                socket.onclose = (event) => {
+                    updateConnectionStatus('disconnected', '연결 끊김');
+                    addLog(`연결이 종료되었습니다. 코드: ${event.code}, 이유: ${event.reason || '알 수 없음'}`, 'info');
+                    
+                    // 버튼 상태 업데이트
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                };
+            } catch (error) {
+                updateConnectionStatus('disconnected', '연결 실패');
+                addLog(`연결 시도 중 오류 발생: ${error.message}`, 'error');
+            }
+        });
+        
+        // 연결 끊기 버튼 클릭 이벤트
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+        });
+        
+        // 메시지 전송 버튼 클릭 이벤트
+        sendBtn.addEventListener('click', () => {
+            const message = messageInput.value.trim();
+            if (!message) {
+                addLog('메시지를 입력하세요.', 'error');
+                return;
+            }
+            
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(message);
+                addLog(`전송: ${message}`, 'sent');
+                messageInput.value = '';
+            } else {
+                addLog('메시지를 전송할 수 없습니다. 연결이 없거나 닫혔습니다.', 'error');
+            }
+        });
+        
+        // 엔터 키 입력으로 메시지 전송
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendBtn.click();
+            }
+        });
+        
+        // 다중 연결 테스트 버튼 클릭 이벤트
+        multiConnectionTestBtn.addEventListener('click', () => {
+            const serverUrl = serverUrlInput.value.trim();
+            if (!serverUrl) {
+                addLog('서버 URL을 입력하세요.', 'error');
+                return;
+            }
+            
+            // 사용자가 입력한 연결 수 가져오기
+            const connectionCount = parseInt(connectionCountInput.value) || 5;
+            addLog(`다중 연결 테스트 시작 (${connectionCount}개의 연결 생성 중...)`, 'info');
+            
+            // connectionCount 개수만큼 연결 생성
+            for (let i = 0; i < connectionCount; i++) {
+                setTimeout(() => {
+                    try {
+                        const testSocket = new WebSocket(serverUrl);
+                        
+                        testSocket.onopen = () => {
+                            addLog(`테스트 연결 #${i+1} 성공`, 'info');
+                            
+                            // 테스트 메시지 전송
+                            setTimeout(() => {
+                                if (testSocket.readyState === WebSocket.OPEN) {
+                                    const testMessage = `테스트 메시지 #${i+1} - ${new Date().toISOString()}`;
+                                    testSocket.send(testMessage);
+                                    addLog(`테스트 연결 #${i+1} 메시지 전송: ${testMessage}`, 'sent');
+                                }
+                            }, 500);
+                        };
+                        
+                        testSocket.onmessage = (event) => {
+                            addLog(`테스트 연결 #${i+1} 수신: ${event.data}`, 'received');
+                            
+                            // 응답 받은 후 연결 종료
+                            setTimeout(() => {
+                                testSocket.close();
+                                addLog(`테스트 연결 #${i+1} 종료됨`, 'info');
+                            }, 1000);
+                        };
+                        
+                        testSocket.onerror = () => {
+                            addLog(`테스트 연결 #${i+1} 오류 발생`, 'error');
+                        };
+                        
+                    } catch (error) {
+                        addLog(`테스트 연결 #${i+1} 생성 중 오류 발생: ${error.message}`, 'error');
+                    }
+                }, i * 1000); // 1초 간격으로 연결
+            }
+        });
+        
+        // 초기 로그
+        addLog('WebSocket 테스트 클라이언트가 준비되었습니다.', 'info');
+    </script>
+</body>
+</html>
