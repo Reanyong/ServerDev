@@ -41,12 +41,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "doc/server/chat/step03_multithread_async_websocket_echo_server.md",
+                "file": "Main/🛠️ Troubleshooting_Log.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "step03_multithread_async_websocket_echo_server"
+              "title": "🛠️ Troubleshooting_Log"
             }
           }
         ],
@@ -199,8 +199,8 @@
   },
   "active": "1c38964f0ebe5260",
   "lastOpenFiles": [
-    "doc/server/chat/step02_async_multclients.md",
     "doc/server/chat/step03_multithread_async_websocket_echo_server.md",
+    "doc/server/chat/step02_async_multclients.md",
     "doc/server/chat/step01_basic_echo.md",
     "Main/🛠️ Troubleshooting_Log.md",
     "Main/📦 FPS 게임 서버 아키텍처 – 기술 스택 통합 설계.md",

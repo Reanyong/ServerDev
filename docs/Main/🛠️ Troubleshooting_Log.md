@@ -87,4 +87,115 @@
     Visual Studio에서 C++ 코드의 인코딩 처리 방식이 상당히 까다로웠다.  
     이로 인해 `.editorconfig` 파일의 중요성을 알게 되었고,  
     협업 시 이런 기본 설정을 **명확히 정의**하는 것이 얼마나 중요한지 체감했다.  
-    인코딩 변환에 의존하기보다는 **명시적으로 UTF-8을 지정하는 습관**을 들이기로 했다
+    인코딩 변환에 의존하기보다는 **명시적으로 UTF-8을 지정하는 습관**을 들이기로 했다.
+
+---
+
+## 📅 2025-04-05 🧪 멀티스레드 WebSocket 서버 구현 중 발생한 주요 이슈 정리
+
+---
+
+### 🧵 스레드 생성 및 실행 문제
+
+- **문제**  
+    `threads_.size()`를 기반으로 반복문을 실행했으나, 벡터가 아직 비어있어 스레드가 생성되지 않고 서버가 즉시 종료됨
+    
+- **원인 분석**  
+    `threads_`는 아직 비어있는 상태에서 `.size()` 상태로 루프를 돌리면 아무 작업도 수행되지 않음
+    
+- **시도한 해결법**
+    
+    -  `threads_.size()` → `num_threads` 변수 사용
+    -  `thread_count`를 명시적으로 계산 후 루프 사용
+        
+- **최종 해결 방법**  
+    `int num_threads = max(thread_count, 1);` 이후 `for (int i = 0; i < num_threads; ++i)`로 수정    
+
+---
+
+### 🔢 hash[thread::id](thread::id)()의 컴파일러 호환성 문제
+
+- **문제**  
+    `thread::id().hash()` 형태가 Visual Studio에서 컴파일 오류 발생
+    
+- **원인 분석**  
+    표준에서는 `std::hash<thread::id>` 특수화를 이용해야 하며, 직접 `.hash()` 멤버는 존재하지 않음
+    
+- **시도한 해결법**
+    
+    -  `hash<thread::id>{}(this_thread::get_id())` 형식으로 변경
+        
+- **최종 해결 방법**  
+    `std::to_wstring(hash<thread::id>{}(std::this_thread::get_id()))` 형태로 해결
+    
+
+---
+
+### 🔐 동시 쓰기 작업으로 인한 race condition
+
+- **문제**  
+    WebSocket에 여러 스레드가 동시에 쓰기 시도 시 충돌 가능성 (race condition)
+    
+- **원인 분석**  
+    여러 클라이언트 메시지를 동시에 처리하려 할 때 `async_write`의 내부 리소스 접근이 충돌
+    
+- **시도한 해결법**
+    
+    -  `write_mutex_` 멤버 변수 추가
+        
+    -  `on_read()` 내 쓰기 전에 `lock_guard<mutex>` 사용
+        
+- **최종 해결 방법**  
+    쓰기 동기화 적용 후 충돌 없이 echo 처리 성공
+    
+
+---
+
+### 🖨️ 콘솔 출력 중첩 문제
+
+- **문제**  
+    여러 스레드에서 동시에 콘솔에 출력하면서 메시지 겹침, 출력 깨짐 발생
+    
+- **원인 분석**  
+    `std::wcout` 또는 `WriteConsoleW` 호출이 스레드 세이프하지 않음
+    
+- **시도한 해결법**
+    
+    -  `console_mutex` 생성
+        
+    -  모든 콘솔 출력 함수에 `lock_guard` 적용
+        
+- **최종 해결 방법**  
+    동기화 적용 후 콘솔 메시지 정렬 정상화됨
+    
+
+---
+
+### ⚙️ io_context 크기 설정 이슈
+
+- **문제**  
+    `io_context` 생성 시 concurrency hint 미지정 시 성능 저하 발생 우려
+    
+- **원인 분석**  
+    멀티스레드에서 각 스레드가 별도로 작업할 수 있도록 `io_context`에 적절한 concurrency 수 전달 필요
+    
+- **시도한 해결법**
+    
+    -  `thread::hardware_concurrency()` 사용해 동시성 계산
+        
+    -  `net::io_context ioc{thread_count}` 형태로 변경
+        
+- **최종 해결 방법**  
+    `thread_count` 기반으로 `io_context` 생성하여 성능 문제 해결
+    
+
+---
+
+- **관련 커밋**  
+    `feat: multithread async websocket echo server`
+
+- **느낀 점**  
+    네트워크 서버에서 멀티스레드 적용 시 비동기만큼이나 자원 동기화 및 콘솔 로깅 안정성도 중요함을 체감함. 특히 Boost 기반 비동기 설계에 있어 스레드 안전성 확보는 핵심 고려 사항. 추가적으로 스레드 관리는 진짜 어디서나 어려운거 같다.
+    
+
+---
