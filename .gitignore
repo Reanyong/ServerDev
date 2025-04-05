@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 # Ignore Obsidian's workspace UI config
 docs/.obsidian/workspace.json
+/docs/.obsidian/workspace.json
