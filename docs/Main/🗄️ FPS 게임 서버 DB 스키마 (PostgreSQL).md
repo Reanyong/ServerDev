@@ -154,6 +154,7 @@ CREATE TABLE Messages (
   id SERIAL PRIMARY KEY,
   chat_id INT REFERENCES Chats(id),
   user_id UUID REFERENCES Users(id),
+  source VARCHAR(10) DEFAULT 'cpp', -- 'cpp' or 'rust'
   message TEXT,
   created_at TIMESTAMPTZ
 );

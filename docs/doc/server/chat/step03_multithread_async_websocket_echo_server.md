@@ -21,11 +21,8 @@ Boost.Beast와 Boost.Asio를 활용하여 비동기 + 멀티스레드 기반의 
 ## 🧪 테스트 방법
 
 1. Visual Studio 2022에서 `multithread_websocket_echo.cpp`빌드
-    
 2. `test/multithread_websocket_test.html` 실행 (WebSocket 접속)
-    
 3. 여러 브라우저 창에서 동시에 접속 후 메시지 송수신 테스트
-    
 
 ---
 
