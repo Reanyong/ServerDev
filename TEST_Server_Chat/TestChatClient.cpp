@@ -1,4 +1,4 @@
-#include <boost/beast/core.hpp>
+﻿#include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/asio.hpp>
 #include <iostream>
@@ -6,88 +6,388 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <mutex>
+#include <atomic>
+#include <csignal>
+#include <iomanip>
 
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
+using namespace std;
+
+// 테스트 통계 수집용 구조체
+struct TestStats {
+    atomic<size_t> total_messages{ 0 };
+    atomic<size_t> successful_messages{ 0 };
+    atomic<size_t> failed_messages{ 0 };
+    chrono::milliseconds total_response_time{ 0 };
+    chrono::milliseconds min_response_time{ chrono::hours(1) };
+    chrono::milliseconds max_response_time{ 0 };
+    mutable mutex stats_mutex;
+
+    void update_response_time(const chrono::milliseconds& time) {
+        lock_guard<mutex> lock(stats_mutex);
+        total_response_time += time;
+        if (time < min_response_time) min_response_time = time;
+        if (time > max_response_time) max_response_time = time;
+    }
+
+    void print_summary(double elapsed_seconds) const {
+        cout << "---------- 테스트 결과 요약 ----------" << endl;
+        cout << "총 테스트 시간: " << fixed << setprecision(2) << elapsed_seconds << " 초" << endl;
+        cout << "총 메시지 수: " << total_messages << endl;
+
+        size_t success_count = successful_messages.load();
+        size_t total_count = total_messages.load();
+        double success_rate = (total_count > 0) ? (success_count * 100.0 / total_count) : 0;
+
+        cout << "성공한 메시지: " << success_count
+            << " (" << success_rate << "%)" << endl;
+        cout << "실패한 메시지: " << failed_messages << endl;
+
+        lock_guard<mutex> lock(stats_mutex);
+        if (success_count > 0) {
+            auto avg_response = chrono::milliseconds(total_response_time.count() / success_count);
+            cout << "평균 응답 시간: " << avg_response.count() << " ms" << endl;
+            cout << "최소 응답 시간: " << min_response_time.count() << " ms" << endl;
+            cout << "최대 응답 시간: " << max_response_time.count() << " ms" << endl;
+        }
+
+        cout << "처리량: " << (success_count / elapsed_seconds) << " messages/sec" << endl;
+        cout << "---------------------------------------" << endl;
+    }
+};
+
+// 테스트 설정 구조체
+struct TestConfig {
+    string host = "localhost";
+    unsigned short port = 8080;
+    int client_count = 100;
+    int message_count = 50;
+    int connect_delay_ms = 20;      // 연결 간 지연
+    int message_delay_min_ms = 100; // 최소 메시지 지연
+    int message_delay_max_ms = 300; // 최대 메시지 지연
+    int read_timeout_ms = 5000;     // 5초 읽기 타임아웃
+};
+
+// 전역 클라이언트 목록 (신호 핸들러용)
+vector<shared_ptr<class Client>> g_clients;
 
 // 클라이언트 세션 클래스
-class Client {
+class Client : public enable_shared_from_this<Client> {
 public:
-    // 생성자에서 서버에 연결
-    Client(net::io_context& ioc, unsigned int id)
-        : id_(id), ws_(net::make_strand(ioc)) {
+    // 생성자에서 설정
+    Client(net::io_context& ioc, unsigned int id, const TestConfig& config)
+        : id_(id),
+        ws_(net::make_strand(ioc)),
+        ping_timer_(ws_.get_executor()),
+        config_(config),
+        buffer_(8192) // 8KB로 버퍼 크기 제한
+    {
     }
 
     // 서버에 연결
-    void connect(const std::string& host, unsigned short port) {
-        tcp::resolver resolver(ws_.get_executor());
-        auto results = resolver.resolve(host, std::to_string(port));
+    bool connect() {
+        try {
+            tcp::resolver resolver(ws_.get_executor());
+            auto results = resolver.resolve(config_.host, to_string(config_.port));
 
-        net::connect(ws_.next_layer(), results.begin(), results.end());
-        ws_.handshake(host, "/");
+            beast::error_code ec;
 
-        // 닉네임 설정
-        std::string nickname = "TestClient" + std::to_string(id_);
-        ws_.write(net::buffer("/nick " + nickname));
+            // 수정된 부분: next_layer()를 통해 기본 tcp 스트림에 접근
+            beast::get_lowest_layer(ws_).connect(results, ec);
 
-        // 환영 메시지 수신
-        beast::flat_buffer buffer;
-        ws_.read(buffer);
-        buffer.consume(buffer.size());
+            if (ec) {
+                cerr << "Client " << id_ << " connect error: " << ec.message() << endl;
+                return false;
+            }
+
+            // WebSocket 핸드셰이크
+            ws_.handshake(config_.host, "/", ec);
+
+            if (ec) {
+                cerr << "Client " << id_ << " handshake error: " << ec.message() << endl;
+                return false;
+            }
+
+            // ping/pong 핸들러 설정
+            setup_pong_handler();
+
+            // 닉네임 설정
+            string nickname = "TestClient" + to_string(id_);
+            ws_.write(net::buffer("/nick " + nickname), ec);
+
+            if (ec) {
+                cerr << "Client " << id_ << " write error: " << ec.message() << endl;
+                return false;
+            }
+
+            // 환영 메시지 수신
+            buffer_.consume(buffer_.size());
+            read_with_timeout(chrono::milliseconds(config_.read_timeout_ms), ec);
+
+            if (ec) {
+                cerr << "Client " << id_ << " read error: " << ec.message() << endl;
+                return false;
+            }
+
+            // ping 타이머 시작
+            start_ping_timer();
+
+            return true;
+        }
+        catch (exception const& e) {
+            cerr << "Client " << id_ << " connect exception: " << e.what() << endl;
+            return false;
+        }
     }
 
     // 메시지 전송
-    void send_messages(int count) {
-        for (int i = 0; i < count; ++i) {
-            std::string msg = "Test message #" + std::to_string(i) + " from client " + std::to_string(id_);
-            ws_.write(net::buffer(msg));
+    void send_messages(TestStats& stats) {
+        for (int i = 0; i < config_.message_count; ++i) {
+            stats.total_messages++;
 
-            // 응답 수신
-            beast::flat_buffer buffer;
-            ws_.read(buffer);
-            buffer.consume(buffer.size());
+            try {
+                // 메시지 생성
+                string msg = "Test message #" + to_string(i) + " from client " + to_string(id_);
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(100 + rand() % 400));
+                // 응답 시간 측정 시작
+                auto start_time = chrono::high_resolution_clock::now();
+
+                // 메시지 전송
+                beast::error_code ec;
+                ws_.write(net::buffer(msg), ec);
+
+                if (ec) {
+                    cerr << "Client " << id_ << " write error: " << ec.message() << endl;
+                    stats.failed_messages++;
+                    continue;
+                }
+
+                // 응답 읽기
+                buffer_.consume(buffer_.size());
+                read_with_timeout(chrono::milliseconds(config_.read_timeout_ms), ec);
+
+                if (ec) {
+                    cerr << "Client " << id_ << " read error: " << ec.message() << endl;
+                    stats.failed_messages++;
+                    continue;
+                }
+
+                // 응답 시간 측정 종료
+                auto end_time = chrono::high_resolution_clock::now();
+                auto response_time = chrono::duration_cast<chrono::milliseconds>(
+                    end_time - start_time);
+
+                // 통계 업데이트
+                stats.successful_messages++;
+                stats.update_response_time(response_time);
+
+                // 메시지 간 지연
+                this_thread::sleep_for(chrono::milliseconds(
+                    config_.message_delay_min_ms +
+                    rand() % (config_.message_delay_max_ms - config_.message_delay_min_ms + 1)
+                ));
+            }
+            catch (exception const& e) {
+                cerr << "Client " << id_ << " exception: " << e.what() << endl;
+                stats.failed_messages++;
+            }
         }
+    }
+
+    // 타임아웃 설정된 읽기
+    bool read_with_timeout(chrono::milliseconds timeout, beast::error_code& ec) {
+        // 동기 읽기로 단순화
+        ws_.read(buffer_, ec);
+        return !ec;
     }
 
     // 연결 종료
     void close() {
-        ws_.close(websocket::close_code::normal);
+        beast::error_code ec;
+        ws_.close(websocket::close_code::normal, ec);
+
+        if (ec && ec != beast::errc::not_connected) {
+            cerr << "Client " << id_ << " close error: " << ec.message() << endl;
+        }
+    }
+
+    // 연결 상태 확인
+    bool is_connected() const {
+        return ws_.is_open();
+    }
+
+private:
+    // ping/pong 핸들러 설정
+    void setup_pong_handler() {
+        ws_.control_callback(
+            [this](websocket::frame_type kind, beast::string_view payload) {
+                if (kind == websocket::frame_type::pong) {
+                    last_pong_time_ = chrono::steady_clock::now();
+                }
+            });
+    }
+
+    // 주기적 핑 타이머 시작
+    void start_ping_timer() {
+        ping_timer_.expires_after(chrono::seconds(30));
+        ping_timer_.async_wait(
+            [this](beast::error_code ec) {
+                if (ec || !ws_.is_open()) {
+                    return;
+                }
+
+                beast::error_code ping_ec;
+                ws_.ping("", ping_ec);
+
+                if (ping_ec) {
+                    cerr << "Client " << id_ << " ping error: " << ping_ec.message() << endl;
+                }
+                else {
+                    start_ping_timer(); // 다음 ping 예약
+                }
+            });
     }
 
 private:
     unsigned int id_;
     websocket::stream<beast::tcp_stream> ws_;
+    net::steady_timer ping_timer_;
+    TestConfig config_;
+    beast::flat_buffer buffer_;
+    chrono::steady_clock::time_point last_pong_time_ = chrono::steady_clock::now();
 };
+
+// RAII 방식의 클라이언트 관리
+class ClientManager {
+public:
+    ClientManager(vector<shared_ptr<Client>>& clients)
+        : clients_(clients) {
+    }
+
+    ~ClientManager() {
+        close_all();
+    }
+
+    void close_all() {
+        for (auto& client : clients_) {
+            try {
+                if (client && client->is_connected()) {
+                    client->close();
+                }
+            }
+            catch (...) {
+                // 무시
+            }
+        }
+        cout << "모든 클라이언트 연결 정리 완료" << endl;
+    }
+
+private:
+    vector<shared_ptr<Client>>& clients_;
+};
+
+// 신호 핸들러 설정
+void setup_signal_handlers() {
+    signal(SIGINT, [](int signal) {
+        cout << "인터럽트 수신, 정리 중..." << endl;
+        for (auto& client : g_clients) {
+            try {
+                if (client) client->close();
+            }
+            catch (...) {
+                // 무시
+            }
+        }
+        exit(0);
+        });
+}
 
 int main() {
     try {
-        const int CLIENT_COUNT = 100;
-        const int MESSAGE_COUNT = 50;
+        // 설정 초기화
+        TestConfig config;
+        config.client_count = 100;
+        config.message_count = 50;
 
+        // 신호 핸들러 설정
+        setup_signal_handlers();
+
+        // 난수 발생기 초기화
+        srand(static_cast<unsigned int>(time(nullptr)));
+
+        cout << "WebSocket 채팅 서버 부하 테스트 시작" << endl;
+        cout << "대상 서버: " << config.host << ":" << config.port << endl;
+        cout << "클라이언트 수: " << config.client_count << endl;
+        cout << "클라이언트당 메시지 수: " << config.message_count << endl;
+
+        // IO 컨텍스트 생성
         net::io_context ioc;
-        std::vector<std::shared_ptr<Client>> clients;
 
         // 클라이언트 생성
-        for (int i = 0; i < CLIENT_COUNT; ++i) {
-            clients.push_back(std::make_shared<Client>(ioc, i));
+        vector<shared_ptr<Client>> clients;
+        clients.reserve(config.client_count);
+        g_clients = clients; // 전역 참조 설정
+
+        // RAII 클라이언트 관리자
+        ClientManager manager(clients);
+
+        // 클라이언트 생성
+        for (int i = 0; i < config.client_count; ++i) {
+            clients.push_back(make_shared<Client>(ioc, i, config));
         }
 
-        // 연결
+        // 모든 클라이언트 연결
+        cout << "클라이언트 연결 중..." << endl;
+        int connected_count = 0;
+
         for (auto& client : clients) {
-            client->connect("localhost", 8080);
+            if (client->connect()) {
+                connected_count++;
+            }
+
+            // 연결 간 지연
+            this_thread::sleep_for(chrono::milliseconds(config.connect_delay_ms));
         }
 
-        auto start_time = std::chrono::high_resolution_clock::now();
+        cout << connected_count << "/" << config.client_count << " 클라이언트 연결됨" << endl;
 
-        // 메시지 전송
-        std::vector<std::thread> threads;
-        for (auto& client : clients) {
-            threads.emplace_back([&client, MESSAGE_COUNT]() {
-                client->send_messages(MESSAGE_COUNT);
+        if (connected_count == 0) {
+            cerr << "연결된 클라이언트가 없음, 테스트 중단" << endl;
+            return EXIT_FAILURE;
+        }
+
+        // 테스트 통계 초기화
+        TestStats stats;
+
+        // 테스트 시작 시간 기록
+        auto start_time = chrono::high_resolution_clock::now();
+
+        // 스레드 풀 크기 설정
+        int thread_count = min(100, static_cast<int>(thread::hardware_concurrency() * 2));
+        int clients_per_thread = (connected_count + thread_count - 1) / thread_count;
+
+        cout << "부하 테스트 시작 (스레드 " << thread_count << "개 사용)" << endl;
+
+        // 스레드 생성 및 메시지 전송
+        vector<thread> threads;
+        threads.reserve(thread_count);
+
+        for (int t = 0; t < thread_count; ++t) {
+            int start_idx = t * clients_per_thread;
+            if (start_idx >= connected_count) break;
+
+            int end_idx = min(start_idx + clients_per_thread, connected_count);
+
+            threads.emplace_back([&clients, &stats, start_idx, end_idx]() {
+                for (int i = start_idx; i < end_idx; ++i) {
+                    if (clients[i]->is_connected()) {
+                        clients[i]->send_messages(stats);
+                    }
+                }
                 });
         }
 
@@ -96,21 +396,20 @@ int main() {
             if (t.joinable()) t.join();
         }
 
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() / 1000.0;
+        // 테스트 종료 시간 기록
+        auto end_time = chrono::high_resolution_clock::now();
+        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end_time - start_time).count() / 1000.0;
 
-        std::cout << "Test completed in " << elapsed << " seconds" << std::endl;
-        std::cout << "Throughput: " << (CLIENT_COUNT * MESSAGE_COUNT) / elapsed << " messages/sec" << std::endl;
+        // 결과 출력
+        stats.print_summary(elapsed);
 
-        // 연결 종료
-        for (auto& client : clients) {
-            client->close();
-        }
+        // 정리 (ClientManager에서 자동 처리)
+        cout << "테스트 완료" << endl;
+
+        return EXIT_SUCCESS;
     }
-    catch (std::exception const& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+    catch (exception const& e) {
+        cerr << "오류: " << e.what() << endl;
         return EXIT_FAILURE;
     }
-
-    return EXIT_SUCCESS;
 }
