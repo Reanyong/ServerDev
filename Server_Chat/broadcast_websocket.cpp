@@ -205,6 +205,8 @@ public:
         lock_guard<mutex> lock(mutex_);
         return sessions_.size();
     }
+
+
 };
 
 // 전역 채팅방 인스턴스
@@ -216,36 +218,35 @@ class Session : public enable_shared_from_this<Session>
 private:
     websocket::stream<beast::tcp_stream> ws_;
     beast::flat_buffer buffer_;
-    mutex write_mutex_;             // 쓰기 작업, 동시 사용 방지를 위한 뮤텍스
-    string nickname_;               // 사용자 닉네임
-    int user_id_;                   // 사용자 고유 ID
-    queue<string> write_queue_;     // 메시지 큐
-    bool writing_ = false;          // 현재 메시지 전송 중 상태
+    mutex write_mutex_;
+    mutex read_mutex_;              // 읽기 작업 동기화를 위한 뮤텍스 추가
+    atomic<bool> reading_{ false };   // 읽기 작업 상태 플래그
+    atomic<bool> writing_{ false };   // 쓰기 작업 상태 플래그
+    atomic<bool> closing_{ false };   // 종료 중 플래그 추가
+    atomic<bool> closed_{ false };    // 이미 종료됨 플래그 추가
+    string nickname_;
+    int user_id_;
+    queue<string> write_queue_;
 
 public:
     // 소켓을 받아 세션 생성
     explicit Session(tcp::socket socket)
-        : ws_(move(socket))
-    {
-
-        // 핑 간격 설정 30초
-        ws_.set_option(websocket::stream_base::timeout::suggested(
-            beast::role_type::server));
-        // 고유 사용자 ID 발급
+        : ws_(move(socket)) {
+        ws_.set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
         user_id_ = g_chatRoom.generateUserId();
-        // 임시 닉네임 생성
         nickname_ = "User" + to_string(user_id_);
     }
 
     ~Session() {
-        // 연결 종료 시 채팅방에서 제거
         try {
-            ConsoleOut(L"[Session] 세션 소멸 시작: " + utf8_to_wstring(nickname_));
-            // 기존 코드...
-            ConsoleOut(L"[Session] 세션 소멸 완료: " + utf8_to_wstring(nickname_));
+            // 이미 closed_ 플래그가 설정되어 있지 않다면 명시적으로 close 호출
+            if (!closed_) {
+                beast::error_code ec;
+                ws_.close(websocket::close_code::normal, ec);
+            }
         }
         catch (...) {
-            ConsoleErr(L"[Error] 세션 소멸자 예외 발생");
+            // 소멸자에서는 예외 무시
         }
     }
 
@@ -265,12 +266,26 @@ public:
     }
 
     void close() {
-        // 웹소켓 연결 안전하게 닫기
-        ws_.async_close(websocket::close_code::normal,
-            [self = shared_from_this()](beast::error_code ec) {
-                if (ec) {
-                    ConsoleErr(L"[Error] 웹소켓 닫기 실패: " + utf8_to_wstring(ec.message()));
+        // 이미 종료 중이거나 종료되었으면 무시
+        bool expected = false;
+        if (!closing_.compare_exchange_strong(expected, true) || closed_) {
+            return;
+        }
+
+        auto self = shared_from_this(); // 안전한 객체 수명 보장
+
+        // 비동기 작업이 아닌 동기 작업으로 변경하여 완료 보장
+        net::post(ws_.get_executor(), [self]() {
+            try {
+                if (self->ws_.is_open()) {
+                    beast::error_code ec;
+                    self->ws_.close(websocket::close_code::normal, ec);
+                    self->closed_ = true;
                 }
+            }
+            catch (const std::exception& e) {
+                ConsoleErr(L"[Error] 웹소켓 닫기 예외: " + utf8_to_wstring(e.what()));
+            }
             });
     }
 
@@ -439,18 +454,78 @@ private:
         do_read();
     }
 
+    void handle_disconnect(beast::error_code ec) {
+        // 이미 종료 중이거나 종료되었으면 무시
+        bool expected = false;
+        if (!closing_.compare_exchange_strong(expected, true) || closed_) {
+            return;
+        }
+
+        try {
+            // 먼저 WebSocket 연결 종료
+            if (ws_.is_open()) {
+                beast::error_code close_ec;
+                ws_.close(websocket::close_code::normal, close_ec);
+                closed_ = true;
+            }
+
+            // 퇴장 메시지 브로드캐스트 
+            auto leave_msg = ChatMessage::createLeaveMessage(nickname_);
+            g_chatRoom.broadcast(leave_msg.toJson(), shared_from_this());
+
+            // 채팅방에서 제거
+            g_chatRoom.leave(shared_from_this());
+
+            ConsoleOut(L"[Session] 클라이언트 연결 종료 완료: " + utf8_to_wstring(nickname_));
+        }
+        catch (const std::exception& e) {
+            ConsoleErr(L"[Error] 세션 정리 중 오류: " + utf8_to_wstring(e.what()));
+        }
+    }
+
     // 비동기적으로 메시지 읽기
     void do_read() {
-        // 스레드 ID 디버깅용 출력
-        ConsoleOut(L"[Session] 읽기 대기 시작 [Thread ID: " +
-            to_wstring(hash<thread::id>{}(this_thread::get_id())) +
-            L", 세션: " + utf8_to_wstring(nickname_) + L"]");
+        // 이미 읽기 중이거나 종료 중이면 무시
+        bool expected = false;
+        if (!reading_.compare_exchange_strong(expected, true)) {
+            // 이미 읽기 중이므로 여기서 중단
+            ConsoleOut(L"[Debug] 이미 읽기 작업 중입니다. 중복 호출 무시.");
+            return;
+        }
 
+        if (closing_ || closed_) {
+            // 종료 중이므로 읽기 중 상태를 초기화하고 중단
+            reading_ = false;
+            ConsoleOut(L"[Debug] 세션이 종료 중이거나 이미 종료되었습니다. 읽기 작업 취소.");
+            return;
+        }
+
+        // 명시적으로 shared_from_this()를 캡쳐하여 수명 보장
+        auto self = shared_from_this();
         ws_.async_read(
             buffer_,
-            beast::bind_front_handler(
-                &Session::on_read,
-                shared_from_this()));
+            [self](beast::error_code ec, size_t bytes_transferred) {
+                // 읽기 작업 완료 표시 - 반드시 콜백 시작 부분에서 처리
+                self->reading_ = false;
+
+                // 콜백 수행 중 예외가 발생해도 읽기 상태는 초기화됨
+                try {
+                    if (!ec && !self->closing_ && !self->closed_) {
+                        self->on_read(ec, bytes_transferred);
+                    }
+                    else {
+                        // 오류가 있거나 종료 중이면 연결 종료 처리
+                        self->handle_disconnect(ec);
+                    }
+                }
+                catch (const std::exception& e) {
+                    ConsoleErr(L"[Error] 읽기 콜백 처리 중 예외: " + utf8_to_wstring(e.what()));
+                    // 예외가 발생해도 연결 종료 처리
+                    if (!self->closing_ && !self->closed_) {
+                        self->handle_disconnect(beast::error_code());
+                    }
+                }
+            });
     }
 
     // 메시지 읽기 완료 후 호출되는 콜백
@@ -662,28 +737,41 @@ private:
                             to_wstring(hash<thread::id>{}(this_thread::get_id())) +
                             L", Strand: " + to_wstring(strand_idx) + L"]");
 
-                        // 다른 strand에서 세션 시작
-                        int session_strand_idx = next_strand_index_++;
-                        if (next_strand_index_ >= strands_.size()) {
-                            next_strand_index_ = 0;
+                        try {
+                            // 다른 strand에서 세션 시작
+                            int session_strand_idx = next_strand_index_++;
+                            if (next_strand_index_ >= strands_.size()) {
+                                next_strand_index_ = 0;
+                            }
+
+                            // 세션 생성
+                            auto session = make_shared<Session>(move(socket));
+
+                            // 다른 strand에서 세션 시작 작업 포스팅
+                            net::post(
+                                strands_[session_strand_idx],
+                                [this, session, session_strand_idx]() {
+                                    try {
+                                        if (!session->is_open()) {
+                                            ConsoleErr(L"[Error] 세션이 이미 닫혔습니다.");
+                                            return;
+                                        }
+
+                                        ConsoleOut(L"[Session] 세션 시작 [Thread ID: " +
+                                            to_wstring(hash<thread::id>{}(this_thread::get_id())) +
+                                            L", Strand: " + to_wstring(session_strand_idx) + L"]");
+
+                                        // 명시적으로 세션의 시작 함수를 호출
+                                        session->start();
+                                    }
+                                    catch (const std::exception& e) {
+                                        ConsoleErr(L"[Error] 세션 시작 중 예외: " + utf8_to_wstring(e.what()));
+                                    }
+                                });
                         }
-
-                        // 세션 생성 및 시작 (다른 strand에 바인딩)
-                        auto session = make_shared<Session>(move(socket));
-
-                        // 다른 strand에서 세션 시작 작업 포스팅
-                        net::post(
-                            strands_[session_strand_idx],
-                            [session, session_strand_idx]() {
-                                ConsoleOut(L"[Session] 세션 시작 [Thread ID: " +
-                                    to_wstring(hash<thread::id>{}(this_thread::get_id())) +
-                                    L", Strand: " + to_wstring(session_strand_idx) + L"]");
-
-                                // 명시적으로 세션의 시작 함수를 호출 
-                                // 객체 수명 보장을 위해 shared_ptr 복사본 사용
-                                auto session_copy = session;
-                                session_copy->start();
-                            });
+                        catch (const std::exception& e) {
+                            ConsoleErr(L"[Error] 클라이언트 연결 처리 중 예외: " + utf8_to_wstring(e.what()));
+                        }
                     }
                     else {
                         ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
