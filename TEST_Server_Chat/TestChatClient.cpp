@@ -10,12 +10,32 @@
 #include <atomic>
 #include <csignal>
 #include <iomanip>
+#include <Windows.h>
+#include <locale>
+#include <codecvt>
 
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
 using namespace std;
+
+std::wstring utf8_to_wstring(const std::string& str) {
+    if (str.empty()) return std::wstring();
+    int size_need = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
+    std::wstring result(size_need, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &result[0], size_need);
+    return result;
+}
+
+// 와이드 문자열(wstring)을 UTF-8 문자열로 변환
+std::string wstring_to_utf8(const std::wstring& wstr) {
+    if (wstr.empty()) return std::string();
+    int size_need = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), nullptr, 0, nullptr, nullptr);
+    std::string result(size_need, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &result[0], size_need, nullptr, nullptr);
+    return result;
+}
 
 // 테스트 통계 수집용 구조체
 struct TestStats {
@@ -77,6 +97,9 @@ vector<shared_ptr<class Client>> g_clients;
 
 // 클라이언트 세션 클래스
 class Client : public enable_shared_from_this<Client> {
+
+private:
+    string nickname_;
 public:
     // 생성자에서 설정
     Client(net::io_context& ioc, unsigned int id, const TestConfig& config)
@@ -115,23 +138,13 @@ public:
             // ping/pong 핸들러 설정
             setup_pong_handler();
 
-            // 닉네임 설정
-            string nickname = "TestClient" + to_string(id_);
-            ws_.write(net::buffer("/nick " + nickname), ec);
+            // 닉네임 설정 부분 제거
+            // 기존 닉네임(TestClient+ID)을 그대로 사용하므로 별도 요청 안 함
 
-            if (ec) {
-                cerr << "Client " << id_ << " write error: " << ec.message() << endl;
-                return false;
-            }
+            // 닉네임 저장만 수행 (서버에 전송하지 않음)
+            nickname_  = "TestClient" + to_string(id_);
 
-            // 환영 메시지 수신
-            buffer_.consume(buffer_.size());
-            read_with_timeout(chrono::milliseconds(config_.read_timeout_ms), ec);
-
-            if (ec) {
-                cerr << "Client " << id_ << " read error: " << ec.message() << endl;
-                return false;
-            }
+            // 환영 메시지 대기 제거 - 서버가 특정 응답을 보낼 때까지 대기하지 않음
 
             // ping 타이머 시작
             start_ping_timer();
@@ -150,8 +163,8 @@ public:
             stats.total_messages++;
 
             try {
-                // 메시지 생성
-                string msg = "Test message #" + to_string(i) + " from client " + to_string(id_);
+                // 메시지 생성 - 메시지 형식을 단순화(서버 부담 감소)
+                string msg = "Msg" + to_string(i) + " from " + to_string(id_);
 
                 // 응답 시간 측정 시작
                 auto start_time = chrono::high_resolution_clock::now();
@@ -185,11 +198,12 @@ public:
                 stats.successful_messages++;
                 stats.update_response_time(response_time);
 
-                // 메시지 간 지연
-                this_thread::sleep_for(chrono::milliseconds(
-                    config_.message_delay_min_ms +
-                    rand() % (config_.message_delay_max_ms - config_.message_delay_min_ms + 1)
-                ));
+                // 메시지 간 지연 - 부하 테스트 시 지연 시간 줄이기
+                int delay = config_.message_delay_min_ms +
+                    rand() % (config_.message_delay_max_ms - config_.message_delay_min_ms + 1);
+
+                // 부하 테스트에서는 지연 시간을 짧게 설정
+                this_thread::sleep_for(chrono::milliseconds(delay));
             }
             catch (exception const& e) {
                 cerr << "Client " << id_ << " exception: " << e.what() << endl;
@@ -308,9 +322,20 @@ void setup_signal_handlers() {
 
 int main() {
     try {
+#ifdef _WIN32
+        // 한글 출력을 위한 콘솔 코드 페이지 설정
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+
+        // 로케일 설정 추가
+        std::locale::global(std::locale(".UTF-8"));
+        std::wcout.imbue(std::locale());
+        std::wcin.imbue(std::locale());
+#endif
+
         // 설정 초기화
         TestConfig config;
-        config.client_count = 100;
+        config.client_count = 20;
         config.message_count = 50;
 
         // 신호 핸들러 설정

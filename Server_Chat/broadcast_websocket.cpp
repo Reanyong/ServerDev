@@ -1,4 +1,4 @@
-// **#**
+﻿// **#**
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/asio.hpp>
@@ -23,37 +23,80 @@ using json = nlohmann::json; // JSON 파싱을 위한 라이브러리
 using namespace std;
 
 // UTF-8 문자열을 와이드 문자열로 변환
-wstring utf8_to_wstring(const string& str)
-{
+wstring utf8_to_wstring(const string& str) {
     if (str.empty()) return wstring();
-    int size_need = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
-    wstring result(size_need, 0);
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &result[0], size_need);
-    return result;
+
+    try {
+        // 필요한 버퍼 크기 계산
+        int size_need = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
+        if (size_need <= 0) {
+            // 변환 실패 시 오류 내용을 직접 확인
+            DWORD error = GetLastError();
+            return L"<변환 오류: " + to_wstring(error) + L">";
+        }
+
+        // 버퍼 할당 및 변환
+        wstring result(size_need, 0);
+        if (MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &result[0], size_need) <= 0) {
+            DWORD error = GetLastError();
+            return L"<변환 오류: " + to_wstring(error) + L">";
+        }
+
+        return result;
+    }
+    catch (const std::exception& e) {
+        // 예외 발생 시 안전한 문자열 반환
+        string what_str = e.what(); // 문자열로 변환
+        wstring what_wstr;
+
+        // 간단히 문자 단위로 변환 (ASCII 문자만 정상 처리됨)
+        for (char c : what_str) {
+            what_wstr.push_back(static_cast<wchar_t>(c));
+        }
+
+        return L"<예외 발생: " + what_wstr + L">";
+    }
 }
 
 // 콘솔에 메시지 출력
-void ConsoleOut(const wstring& message)
-{
+void ConsoleOut(const wstring& message) {
     static mutex console_mutex;
     lock_guard<mutex> lock(console_mutex);  // 스레드 안전성을 위해 뮤텍스 사용
 
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD dwWritten = 0;
-    WriteConsoleW(hConsole, message.c_str(), (DWORD)message.length(), &dwWritten, NULL);
-    WriteConsoleW(hConsole, L"\r\n", 2, &dwWritten, NULL);
+    try {
+        HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD dwWritten = 0;
+
+        // 콘솔 출력 API 사용
+        WriteConsoleW(hConsole, message.c_str(), (DWORD)message.length(), &dwWritten, NULL);
+        WriteConsoleW(hConsole, L"\r\n", 2, &dwWritten, NULL);
+    }
+    catch (const std::exception& e) {
+        // 출력 실패 시 대체 방법 시도
+        std::wcerr << L"출력 오류: " << e.what() << std::endl;
+        std::wcout << message << std::endl;
+    }
 }
 
+
 // 콘솔에 에러 메시지 출력
-void ConsoleErr(const wstring& message)
-{
+void ConsoleErr(const wstring& message) {
     static mutex console_mutex;
     lock_guard<mutex> lock(console_mutex);  // 스레드 안전성을 위해 뮤텍스 사용
 
-    HANDLE hConsole = GetStdHandle(STD_ERROR_HANDLE);
-    DWORD dwWritten = 0;
-    WriteConsoleW(hConsole, message.c_str(), (DWORD)message.length(), &dwWritten, NULL);
-    WriteConsoleW(hConsole, L"\r\n", 2, &dwWritten, NULL);
+    try {
+        HANDLE hConsole = GetStdHandle(STD_ERROR_HANDLE);
+        DWORD dwWritten = 0;
+
+        // 콘솔 출력 API 사용
+        WriteConsoleW(hConsole, message.c_str(), (DWORD)message.length(), &dwWritten, NULL);
+        WriteConsoleW(hConsole, L"\r\n", 2, &dwWritten, NULL);
+    }
+    catch (const std::exception& e) {
+        // 출력 실패 시 대체 방법 시도
+        std::wcerr << L"오류 출력 실패: " << e.what() << std::endl;
+        std::wcerr << message << std::endl;
+    }
 }
 
 #ifdef _DEBUG
@@ -231,8 +274,11 @@ public:
             });
     }
 
-    void start()
-    {
+    void start() {
+        // 현재 스레드 ID 출력
+        ConsoleOut(L"[Session] 웹소켓 핸드셰이크 시작 [Thread ID: " +
+            to_wstring(hash<thread::id>{}(this_thread::get_id())) + L"]");
+
         // 비동기적으로 웹소켓 핸드셰이크 수행
         ws_.async_accept(
             beast::bind_front_handler(
@@ -332,15 +378,32 @@ private:
     }
     */
 
-    void on_write(beast::error_code ec, size_t bytes_transferred,
-        shared_ptr<string> message_ptr) {
+    void on_write(beast::error_code ec, size_t bytes_transferred, shared_ptr<string> message_ptr) {
         boost::ignore_unused(bytes_transferred);
         boost::ignore_unused(message_ptr);  // 메시지 수명을 유지하기 위한 매개변수
 
         if (ec) {
-            ConsoleErr(L"[Error] Write: " + utf8_to_wstring(ec.message()) +
+            // 오류 코드를 세부적으로 분석
+            wstring error_type;
+            if (ec == boost::asio::error::operation_aborted) {
+                error_type = L"작업 취소됨";
+            }
+            else if (ec == boost::beast::websocket::error::closed) {
+                error_type = L"WebSocket 연결 닫힘";
+            }
+            else if (ec == boost::asio::error::eof) {
+                error_type = L"연결 종료 (EOF)";
+            }
+            else {
+                // 일반 오류 메시지
+                error_type = L"오류: " + utf8_to_wstring(ec.message());
+            }
+
+            // 오류 출력 - 스레드 ID와 함께
+            ConsoleErr(L"[Error] Write: " + error_type +
                 L" [Thread ID: " + to_wstring(hash<thread::id>{}(this_thread::get_id())) + L"]");
 
+            // 쓰기 상태 초기화
             lock_guard<mutex> lock(write_mutex_);
             writing_ = false;
             return;
@@ -378,6 +441,11 @@ private:
 
     // 비동기적으로 메시지 읽기
     void do_read() {
+        // 스레드 ID 디버깅용 출력
+        ConsoleOut(L"[Session] 읽기 대기 시작 [Thread ID: " +
+            to_wstring(hash<thread::id>{}(this_thread::get_id())) +
+            L", 세션: " + utf8_to_wstring(nickname_) + L"]");
+
         ws_.async_read(
             buffer_,
             beast::bind_front_handler(
@@ -524,16 +592,25 @@ private:
     net::io_context& ioc_;
     tcp::acceptor acceptor_;
     vector<thread> threads_;
+    atomic<int> next_strand_index_{ 0 };  // 라운드 로빈 방식으로 strand 할당에 사용할 인덱스
+    vector<net::strand<net::io_context::executor_type>> strands_;  // 여러 strand 생성
 
 public:
     Server(net::io_context& ioc, const tcp::endpoint& endpoint, int thread_count)
         : ioc_(ioc),
-        acceptor_(ioc, endpoint)
-    {
-        // 멀티스레드 생성
-        // CPU 코어 수에 따라 스레드 생성 -> 최소 thread_count 만큼 생성
+        acceptor_(ioc, endpoint) {
+        // 멀티스레드 처리를 위한 strand 생성
+        // strand는 각 스레드 간 작업을 분산시키는 역할
         int num_threads = max(thread_count, 1);
-        ConsoleOut(L"[Server] " + to_wstring(num_threads) + L"개의 스레드로 서버 시작");
+        strands_.reserve(num_threads);
+
+        for (int i = 0; i < num_threads; ++i) {
+            strands_.emplace_back(net::make_strand(ioc));
+        }
+
+        ConsoleOut(L"[Server] " + to_wstring(num_threads) +
+            L"개의 스레드와 " + to_wstring(strands_.size()) +
+            L"개의 strand로 서버 시작");
 
         do_accept();
     }
@@ -557,6 +634,7 @@ public:
                 ConsoleOut(L"[Thread] 작업 스레드 #" + to_wstring(i) + L" 종료");
                 });
         }
+
         // 모든 스레드가 종료될 때까지 대기
         for (auto& thread : threads_) {
             if (thread.joinable()) {
@@ -568,30 +646,73 @@ public:
 private:
     // 클라이언트 연결 수락
     void do_accept() {
-        acceptor_.async_accept(
-            [this](beast::error_code ec, tcp::socket socket) {
-                if (!ec) {
-                    ConsoleOut(L"[Server] 클라이언트 연결됨 [Thread ID: " +
-                        to_wstring(hash<thread::id>{}(this_thread::get_id())) + L"]");
+        // 다음 연결은 다른 strand에서 처리하도록 설정
+        int strand_idx = next_strand_index_++;
+        if (next_strand_index_ >= strands_.size()) {
+            next_strand_index_ = 0;  // 라운드 로빈 방식
+        }
 
-                    // 세션 생성 및 시작
-                    make_shared<Session>(move(socket))->start();
-                }
-                else {
-                    ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
-                }
-                // 다음 클라이언트 연결 대기
-                do_accept();
-            });
+        // 해당 strand에서 비동기 수락 작업 진행
+        acceptor_.async_accept(
+            net::bind_executor(
+                strands_[strand_idx],
+                [this, strand_idx](beast::error_code ec, tcp::socket socket) {
+                    if (!ec) {
+                        ConsoleOut(L"[Server] 클라이언트 연결됨 [Thread ID: " +
+                            to_wstring(hash<thread::id>{}(this_thread::get_id())) +
+                            L", Strand: " + to_wstring(strand_idx) + L"]");
+
+                        // 다른 strand에서 세션 시작
+                        int session_strand_idx = next_strand_index_++;
+                        if (next_strand_index_ >= strands_.size()) {
+                            next_strand_index_ = 0;
+                        }
+
+                        // 세션 생성 및 시작 (다른 strand에 바인딩)
+                        auto session = make_shared<Session>(move(socket));
+
+                        // 다른 strand에서 세션 시작 작업 포스팅
+                        net::post(
+                            strands_[session_strand_idx],
+                            [session, session_strand_idx]() {
+                                ConsoleOut(L"[Session] 세션 시작 [Thread ID: " +
+                                    to_wstring(hash<thread::id>{}(this_thread::get_id())) +
+                                    L", Strand: " + to_wstring(session_strand_idx) + L"]");
+
+                                // 명시적으로 세션의 시작 함수를 호출 
+                                // 객체 수명 보장을 위해 shared_ptr 복사본 사용
+                                auto session_copy = session;
+                                session_copy->start();
+                            });
+                    }
+                    else {
+                        ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
+                    }
+
+                    // 다음 클라이언트 연결 대기 - 다른 strand에서 처리
+                    // 여기에서 새로운 strand 인덱스를 사용하여 분산 처리
+                    int next_accept_strand_idx = next_strand_index_++;
+                    if (next_strand_index_ >= strands_.size()) {
+                        next_strand_index_ = 0;
+                    }
+
+                    // 다음 accept 작업을 다른 strand에 포스팅
+                    net::post(
+                        strands_[next_accept_strand_idx],
+                        [this]() {
+                            do_accept();
+                        });
+                }));
     }
 };
+
 
 int main() {
     try {
         // 콘솔 설정
         SetConsoleOutputCP(CP_UTF8);
         SetConsoleCP(CP_UTF8);
-		setlocale(LC_ALL, "ko_KR.UTF-8"); // 로케일 설정
+        setlocale(LC_ALL, "ko_KR.UTF-8"); // 로케일 설정
 
         // 시작 메시지
         ConsoleOut(L"채팅 서버 시작 (WebSocket) - 포트 8080");
@@ -611,8 +732,19 @@ int main() {
         server.run();
     }
     catch (const exception& e) {
-        cerr << "Exception: " << e.what() << endl;
-        ConsoleErr(L"예외 발생: " + utf8_to_wstring(e.what()));
+        wstring error_msg = L"예외 발생: ";
+        wstring what_msg;
+
+        try {
+            // e.what()을 wstring으로 변환 시도
+            what_msg = utf8_to_wstring(e.what());
+        }
+        catch (...) {
+            // 변환 실패 시 안전한 대체 텍스트
+            what_msg = L"<메시지 변환 실패>";
+        }
+
+        ConsoleErr(error_msg + what_msg);
         return EXIT_FAILURE;
     }
 
