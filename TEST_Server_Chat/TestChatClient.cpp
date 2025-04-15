@@ -405,7 +405,7 @@ int main() {
         progress_timer.async_wait(update_progress);
 
         // 동시 연결 제한 (과부하 방지)
-        const int MAX_CONCURRENT_CONNECTS = 10;
+        const int MAX_CONCURRENT_CONNECTS = 5;
         atomic<int> active_connects{ 0 };
         mutex connect_mutex;
         condition_variable connect_cv;
