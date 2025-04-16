@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="db_integration">
+      <UniqueIdentifier>{0a929b90-792c-4995-80ef-187cb5a09037}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="echo_websocket.cpp">
@@ -27,5 +30,16 @@
     <ClCompile Include="broadcast_websocket.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="db_integration_chat.cpp">
+      <Filter>db_integration</Filter>
+    </ClCompile>
+    <ClCompile Include="DatabaseManager.cpp">
+      <Filter>db_integration</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="DatabaseManager.h">
+      <Filter>db_integration</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
