@@ -91,30 +91,39 @@ private:
 
     // 메시지 읽기 완료 후 호출되는 콜백
     void on_read(beast::error_code ec, size_t bytes_transferred) {
-        boost::ignore_unused(bytes_transferred);
+        try {
+            boost::ignore_unused(bytes_transferred);
 
-        // 오류 처리
-        if (ec) {
-            if (ec == websocket::error::closed) {
-                ConsoleOut(L"[Session] 클라이언트 연결 종료");
+            // 오류 처리
+            if (ec) {
+                if (ec == websocket::error::closed) {
+                    ConsoleOut(L"[Session] 클라이언트 연결 종료");
+                }
+                else {
+                    ConsoleErr(L"[Error] Read: " + utf8_to_wstring(ec.message()));
+                }
+                return;
             }
-            else {
-                ConsoleErr(L"[Error] Read: " + utf8_to_wstring(ec.message()));
-            }
-            return;
+
+            // 수신한 메시지 처리
+            string message = beast::buffers_to_string(buffer_.data());
+            ConsoleOut(L"[Recv] " + utf8_to_wstring(message));
+
+            // 에코 응답 (비동기적으로 메시지 전송)
+            ws_.text(ws_.got_text());
+            ws_.async_write(
+                buffer_.data(),
+                beast::bind_front_handler(
+                    &Session::on_write,
+                    shared_from_this()));
+
         }
-
-        // 수신한 메시지 처리
-        string message = beast::buffers_to_string(buffer_.data());
-        ConsoleOut(L"[Recv] " + utf8_to_wstring(message));
-
-        // 에코 응답 (비동기적으로 메시지 전송)
-        ws_.text(ws_.got_text());
-        ws_.async_write(
-            buffer_.data(),
-            beast::bind_front_handler(
-                &Session::on_write,
-                shared_from_this()));
+        catch (const std::exception& e) {
+            ConsoleErr(L"[Error] 읽기 핸들러 예외: " + utf8_to_wstring(e.what()));
+        }
+        catch (...) {
+            ConsoleErr(L"[Error] 읽기 핸들러 알 수 없는 예외");
+        }
     }
 
     // 메시지 쓰기 완료 후 호출되는 콜백

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 채팅 클라이언트</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .chat-header {
+            background-color: #4a69bd;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 15px;
+            border-radius: 5px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .system-message {
+            background-color: #f1f1f1;
+            color: #555;
+            text-align: center;
+            font-style: italic;
+            margin: 10px auto;
+            padding: 5px;
+            border-radius: 5px;
+            max-width: 80%;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+            color: #0d47a1;
+        }
+        .other-message {
+            background-color: #ede7f6;
+            margin-right: auto;
+            color: #4527a0;
+        }
+        .message-info {
+            font-size: 12px;
+            color: #777;
+            margin-bottom: 3px;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #eee;
+        }
+        #message-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            outline: none;
+        }
+        #send-button {
+            margin-left: 10px;
+            padding: 10px 15px;
+            background-color: #4a69bd;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #send-button:hover {
+            background-color: #3a559c;
+        }
+        .connection-status {
+            padding: 5px 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .connected {
+            color: green;
+        }
+        .disconnected {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            WebSocket 채팅
+        </div>
+        <div class="connection-status disconnected" id="connection-status">
+            연결 끊김
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <!-- 메시지가 여기에 추가됩니다 -->
+        </div>
+        <div class="chat-input">
+            <input type="text" id="message-input" placeholder="메시지를 입력하세요..." autocomplete="off">
+            <button id="send-button">전송</button>
+        </div>
+    </div>
+
+<script>
+    // DOM 요소
+    const chatMessages = document.getElementById('chat-messages');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const connectionStatus = document.getElementById('connection-status');
+    
+    let socket;
+    let myNickname = "";
+    
+    // 웹소켓 연결 함수
+    function connect() {
+        // 로컬호스트 연결 (서버 IP 필요시 변경)
+        socket = new WebSocket('ws://localhost:8080');
+        
+        // 연결 성공 시
+        socket.onopen = function(e) {
+            connectionStatus.textContent = '연결됨';
+            connectionStatus.classList.remove('disconnected');
+            connectionStatus.classList.add('connected');
+            console.log('WebSocket 연결 성공');
+        };
+        
+        // 메시지 수신 시
+        socket.onmessage = function(event) {
+            try {
+                const message = JSON.parse(event.data);
+                
+                // 시스템 메시지에서 내 닉네임 정보 추출
+                if (parseInt(message.type) === 3) {
+                    // 환영 메시지에서 User ID 추출 (예: "User1님이 입장하셨습니다")
+                    if (message.content.includes("환영합니다")) {
+                        // 이 시점에서는 아직 닉네임이 비어있을 수 있음
+                        if (!myNickname) {
+                            // 서버에서 할당한 기본 닉네임 (User1, User2 등)을 사용
+                            const lastMessage = document.querySelector('.system-message:last-child');
+                            if (lastMessage && lastMessage.textContent.includes("님이 입장하셨습니다")) {
+                                const userMatch = lastMessage.textContent.match(/([^님]+)님이 입장하셨습니다/);
+                                if (userMatch && userMatch[1]) {
+                                    myNickname = userMatch[1];
+                                    console.log("초기 닉네임 설정: " + myNickname);
+                                }
+                            }
+                        }
+                    }
+                    // 닉네임 변경 메시지 처리 (예: "User1님이 NewName으로 닉네임을 변경했습니다")
+                    else if (message.content.includes("으로 닉네임을 변경했습니다")) {
+                        const changeMatch = message.content.match(/(.+)님이 (.+)으로 닉네임을 변경했습니다/);
+                        if (changeMatch && changeMatch[1] && changeMatch[2]) {
+                            const oldNick = changeMatch[1];
+                            const newNick = changeMatch[2];
+                            
+                            // 내 닉네임이 변경되었는지 확인
+                            if (oldNick === myNickname) {
+                                myNickname = newNick;
+                                console.log("닉네임 변경 감지: " + oldNick + " -> " + newNick);
+                            }
+                        }
+                    }
+                }
+                
+                displayMessage(message);
+            } catch (error) {
+                console.error("메시지 처리 오류:", error);
+            }
+        };
+        
+        // 연결 종료 시
+        socket.onclose = function(event) {
+            connectionStatus.textContent = '연결 끊김';
+            connectionStatus.classList.remove('connected');
+            connectionStatus.classList.add('disconnected');
+            console.log('WebSocket 연결 종료: ', event.code, event.reason);
+            
+            // 자동 재연결 시도
+            setTimeout(connect, 3000);
+        };
+        
+        // 오류 발생 시
+        socket.onerror = function(error) {
+            console.error('WebSocket 오류: ', error);
+        };
+    }
+    
+    // 메시지 전송 함수
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (message.length === 0) return;
+        
+        // 닉네임 변경 명령어 처리
+        if (message.startsWith('/nick ')) {
+            const newNickname = message.substring(6).trim();
+            if (newNickname) {
+                console.log("닉네임 변경 요청: " + newNickname);
+                // 실제 닉네임 변경은 서버 응답에서 처리됨
+            }
+        }
+        
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(message);
+            messageInput.value = '';
+        }
+    }
+    
+    // 메시지 화면에 표시 함수
+    function displayMessage(message) {
+        const messageElement = document.createElement('div');
+        const messageType = parseInt(message.type);
+        
+        // 시스템 메시지 (입장, 퇴장, 시스템)
+        if (messageType === 0 || messageType === 1 || messageType === 3) {
+            messageElement.className = 'system-message';
+            messageElement.textContent = message.content;
+        } 
+        // 일반 채팅 메시지
+        else if (messageType === 2) {
+            messageElement.className = 'message';
+            
+            // 내 메시지인지 확인
+            if (message.nickname === myNickname) {
+                messageElement.classList.add('user-message');
+                console.log("내 메시지 표시: " + message.nickname);
+            } else {
+                messageElement.classList.add('other-message');
+                console.log("타인 메시지 표시: " + message.nickname);
+            }
+            
+            const messageInfo = document.createElement('div');
+            messageInfo.className = 'message-info';
+            messageInfo.textContent = `${message.nickname} • ${message.timestamp}`;
+            
+            const messageContent = document.createElement('div');
+            messageContent.textContent = message.content;
+            
+            messageElement.appendChild(messageInfo);
+            messageElement.appendChild(messageContent);
+        }
+        
+        chatMessages.appendChild(messageElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // 페이지 언로드 시 연결 종료 알림
+    window.addEventListener('beforeunload', function() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            // 연결 종료 전 메시지 전송 시도
+            socket.send("/quit");
+        }
+    });
+    
+    // 이벤트 리스너 등록
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+    
+    // 초기 연결 시작
+    connect();
+</script>
+</body>
+</html>

@@ -6,11 +6,45 @@ root = true
 charset = utf-8
 end_of_line = crlf
 insert_final_newline = true
+trim_trailing_whitespace = true
 
 # C++ 파일에 대한 설정
-[*.{cpp,h,hpp}]
+[*.{cpp,h,hpp,cc,cxx,c,inl}]
 indent_style = space
 indent_size = 4
 trim_trailing_whitespace = true
-cpp_generate_documentation_comments = xml
-cpp_encoding = utf-8-bom
+# UTF-8 BOM 설정
+charset = utf-8-bom
+# 중괄호 스타일 적용 (K&R 스타일)
+cpp_new_line_before_open_brace_namespace = same_line
+cpp_new_line_before_open_brace_type = same_line
+cpp_new_line_before_open_brace_function = same_line
+cpp_new_line_before_open_brace_block = same_line
+cpp_new_line_before_open_brace_lambda = same_line
+cpp_indent_case_contents = true
+cpp_indent_case_labels = false
+
+# 헤더 파일 특별 관리
+# [*.h]
+# cpp_generate_documentation_comments = xml
+
+# 마크다운 및 문서 파일
+[*.{md,txt}]
+trim_trailing_whitespace = false
+indent_style = space
+indent_size = 2
+
+# 프로젝트 및 솔루션 파일
+[*.{vcxproj,sln}]
+charset = utf-8-bom
+end_of_line = crlf
+
+# 스크립트 파일
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
+charset = utf-8
+
+# 추가: 빌드 및 구성 파일에 대한 설정
+[{CMakeLists.txt,*.cmake}]
+indent_style = space
+indent_size = 2

@@ -1,5 +1,3 @@
- 🧱 Step 01: Basic Echo WebSocket Server
-
 ## 🎯 목표
 Boost.Beast를 사용하여 단일 클라이언트와 WebSocket으로 통신하는 기본 에코 서버를 구현합니다.  
 클라이언트가 보낸 메시지를 그대로 되돌려 보내는 구조로, WebSocket 서버의 동작 원리를 학습하는 데 목적이 있습니다.

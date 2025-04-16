@@ -1,5 +1,3 @@
- 🧵 Step 03: Multithreaded Asynchronous WebSocket Echo Server
- 
 ## 🎯 목표
 Boost.Beast와 Boost.Asio를 활용하여 비동기 + 멀티스레드 기반의 고성능 WebSocket 채팅 서버를 구현합니다. 동시 다중 클라이언트 연결을 처리할 수 있으며, 각 클라이언트 메시지를 비동기로 수신/응답합니다.
 
@@ -21,11 +19,8 @@ Boost.Beast와 Boost.Asio를 활용하여 비동기 + 멀티스레드 기반의 
 ## 🧪 테스트 방법
 
 1. Visual Studio 2022에서 `multithread_websocket_echo.cpp`빌드
-    
 2. `test/multithread_websocket_test.html` 실행 (WebSocket 접속)
-    
 3. 여러 브라우저 창에서 동시에 접속 후 메시지 송수신 테스트
-    
 
 ---
 

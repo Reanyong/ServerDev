@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket 채팅 클라이언트</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #chatLog { height: 300px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; margin-bottom: 10px; }
+        #messageInput { width: 80%; padding: 8px; }
+        button { padding: 8px 16px; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket 채팅</h1>
+    <div id="chatLog"></div>
+    <input type="text" id="messageInput" placeholder="메시지를 입력하세요...">
+    <button onclick="sendMessage()">전송</button>
+    <script>
+        const chatLog = document.getElementById('chatLog');
+        const messageInput = document.getElementById('messageInput');
+        let socket;
+
+        function connect() {
+            // 서버 IP 주소로 변경하세요
+            socket = new WebSocket('ws://172.30.1.100:8080');
+
+            socket.onopen = function(e) {
+                appendMessage('System', '서버에 연결되었습니다');
+            };
+
+            socket.onmessage = function(event) {
+                try {
+                    const msg = JSON.parse(event.data);
+                    appendMessage(msg.nickname, msg.content);
+                } catch (e) {
+                    appendMessage('System', '수신: ' + event.data);
+                }
+            };
+
+            socket.onclose = function(event) {
+                if (event.wasClean) {
+                    appendMessage('System', `연결이 정상적으로 종료되었습니다, 코드=${event.code}`);
+                } else {
+                    appendMessage('System', '연결이 끊겼습니다');
+                }
+            };
+
+            socket.onerror = function(error) {
+                appendMessage('Error', error.message);
+            };
+        }
+
+        function appendMessage(sender, message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = `${sender}: ${message}`;
+            chatLog.appendChild(messageElement);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        function sendMessage() {
+            if (messageInput.value && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(messageInput.value);
+                messageInput.value = '';
+            }
+        }
+
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // 페이지 로드 시 연결
+        connect();
+    </script>
+</body>
+</html>
