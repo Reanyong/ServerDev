@@ -30,11 +30,11 @@
     <ClCompile Include="broadcast_websocket.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="db_integration_chat.cpp">
-      <Filter>db_integration</Filter>
-    </ClCompile>
     <ClCompile Include="DatabaseManager.cpp">
       <Filter>db_integration</Filter>
+    </ClCompile>
+    <ClCompile Include="db_integration_chat.cpp">
+      <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

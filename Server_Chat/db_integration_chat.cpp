@@ -27,7 +27,7 @@ using namespace std;
 
 // UTF-8 문자열을 와이드 문자열로 변환 (기존 코드 유지)
 wstring utf8_to_wstring(const string& str) {
-    // 기존 코드 유지
+    
     if (str.empty()) return wstring();
 
     try {
@@ -64,7 +64,7 @@ wstring utf8_to_wstring(const string& str) {
 
 // 콘솔에 메시지 출력 (기존 코드 유지)
 void ConsoleOut(const wstring& message) {
-    // 기존 코드 유지
+    
     static mutex console_mutex;
     lock_guard<mutex> lock(console_mutex);  // 스레드 안전성을 위해 뮤텍스 사용
 
@@ -85,7 +85,7 @@ void ConsoleOut(const wstring& message) {
 
 // 콘솔에 에러 메시지 출력 (기존 코드 유지)
 void ConsoleErr(const wstring& message) {
-    // 기존 코드 유지
+    
     static mutex console_mutex;
     lock_guard<mutex> lock(console_mutex);  // 스레드 안전성을 위해 뮤텍스 사용
 
@@ -169,28 +169,34 @@ struct ChatMessage {
     }
 
     // DB에 메시지 저장 (새로 추가된 기능)
-    bool saveToDatabase(int chat_id = 1) const {
+    bool saveToDatabase(int chat_id = 1, const string& user_id = "") const {
         try {
-            string msgType;
-            switch (type) {
-            case MessageType::JOIN: msgType = "JOIN"; break;
-            case MessageType::LEAVE: msgType = "LEAVE"; break;
-            case MessageType::CHAT: msgType = "CHAT"; break;
-            case MessageType::SYSTEM: msgType = "SYSTEM"; break;
-            default: msgType = "UNKNOWN";
-            }
-
-            // 데이터베이스에 메시지 저장
             auto& db = DatabaseManager::getInstance();
             return db.executeTransaction([&](pqxx::work& txn) {
-                txn.exec(
-                    "INSERT INTO Messages (chat_id, nickname, message, message_type, created_at) "
-                    "VALUES (" + txn.quote(chat_id) + ", "
-                    + txn.quote(nickname) + ", "
-                    + txn.quote(content) + ", "
-                    + txn.quote(msgType) + ", "
-                    + txn.quote(timestamp) + "::timestamptz)"
-                );
+                if (user_id.empty()) {
+                    // user_id가 없는 경우 (시스템 메시지 등)
+                    txn.exec(
+                        "INSERT INTO Messages (chat_id, user_id, message, created_at, source) "
+                        "VALUES ("
+                        + txn.quote(chat_id) + ", "
+                        + "NULL, "
+                        + txn.quote(content) + ", "
+                        + txn.quote(timestamp) + "::timestamptz, "
+                        + "'cpp')"
+                    );
+                }
+                else {
+                    // user_id가 있는 경우
+                    txn.exec(
+                        "INSERT INTO Messages (chat_id, user_id, message, created_at, source) "
+                        "VALUES ("
+                        + txn.quote(chat_id) + ", "
+                        + txn.quote(user_id) + "::uuid, "
+                        + txn.quote(content) + ", "
+                        + txn.quote(timestamp) + "::timestamptz, "
+                        + "'cpp')"
+                    );
+                }
                 });
         }
         catch (const std::exception& e) {
@@ -223,39 +229,86 @@ private:
     mutex mutex_;                       // 참가자 목록 접근을 위한 뮤텍스
     int next_user_id_ = 1;
     int chat_id_ = 1;  // 기본 채팅방 ID
+    bool initialized_ = false; // 초기화 여부 플래그
 
 public:
     // 생성자에 DB 초기화 및 채팅방 ID 설정 추가
     ChatRoom() {
+        //try {
+        //    // 채팅방이 이미 있는지 확인하고 없으면 생성
+        //    auto& db = DatabaseManager::getInstance();
+
+        //    // 먼저 채팅방이 있는지 확인
+        //    auto result = db.executeQuery("SELECT id FROM Chats WHERE chat_name = '기본 채팅방' LIMIT 1");
+
+        //    if (result.empty()) {
+        //        // 트랜잭션으로 채팅방 생성
+        //        db.executeTransaction([&](pqxx::work& txn) {
+        //            pqxx::result insert_result = txn.exec(
+        //                "INSERT INTO Chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
+        //            );
+        //            if (!insert_result.empty()) {
+        //                chat_id_ = insert_result[0][0].as<int>();
+        //            }
+        //            });
+
+        //        ConsoleOut(L"[DB] 새 채팅방 생성 - ID: " + to_wstring(chat_id_));
+        //    }
+        //    else {
+        //        // 기존 채팅방 ID 사용
+        //        chat_id_ = result[0][0].as<int>();
+        //        ConsoleOut(L"[DB] 기존 채팅방 사용 - ID: " + to_wstring(chat_id_));
+        //    }
+        //}
+        //catch (const std::exception& e) {
+        //    ConsoleErr(utf8_to_wstring(string("채팅방 초기화 오류: ") + e.what()));
+        //    // 기본값 유지
+        //    chat_id_ = 1;
+        //}
+    }
+
+    void initialize() {
+        if (initialized_) return;  // 이미 초기화되었으면 리턴
+
         try {
             // 채팅방이 이미 있는지 확인하고 없으면 생성
             auto& db = DatabaseManager::getInstance();
+
             auto result = db.executeQuery("SELECT id FROM Chats WHERE chat_name = '기본 채팅방' LIMIT 1");
 
             if (result.empty()) {
-                // 새 채팅방 생성
-                auto insert_result = db.executeQuery(
-                    "INSERT INTO Chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
-                );
-                chat_id_ = insert_result[0][0].as<int>();
+                // 트랜잭션으로 채팅방 생성
+                db.executeTransaction([&](pqxx::work& txn) {
+                    pqxx::result insert_result = txn.exec(
+                        "INSERT INTO Chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
+                    );
+                    if (!insert_result.empty()) {
+                        chat_id_ = insert_result[0][0].as<int>();
+                    }
+                    });
+
+                ConsoleOut(L"[DB] 새 채팅방 생성 - ID: " + to_wstring(chat_id_));
             }
             else {
                 // 기존 채팅방 ID 사용
                 chat_id_ = result[0][0].as<int>();
+                ConsoleOut(L"[DB] 기존 채팅방 사용 - ID: " + to_wstring(chat_id_));
             }
 
-            ConsoleOut(L"[DB] 채팅방 ID: " + to_wstring(chat_id_));
+            initialized_ = true;
         }
         catch (const std::exception& e) {
             ConsoleErr(utf8_to_wstring(string("채팅방 초기화 오류: ") + e.what()));
-            // 기본값 유지
+            // 초기화 실패시 기본값으로 진행
+            chat_id_ = 1;
         }
     }
 
-    // 채팅방 세션 추가 (기존 코드 유지)
+
+    // 채팅방 세션 추가
     void join(shared_ptr<Session> session);
 
-    // 채팅방 세션 제거 (기존 코드 유지)
+    // 채팅방 세션 제거
     void leave(shared_ptr<Session> session);
 
     // 모든 세션 메세지 브로드캐스트 (DB 저장 기능 추가)
@@ -277,7 +330,7 @@ public:
     }
 };
 
-// 전역 채팅방 인스턴스 (기존 코드 유지)
+// 전역 채팅방 인스턴스
 ChatRoom g_chatRoom;
 
 // 세션 클래스 (DB 연동 기능 추가)
@@ -326,13 +379,16 @@ public:
             return db.executeTransaction([&](pqxx::work& txn) {
                 // 사용자가 존재하는지 확인
                 pqxx::result r = txn.exec(
-                    "SELECT id FROM Users WHERE username = " + txn.quote(nickname_)
+                    "SELECT id::text FROM Users WHERE username = " + txn.quote(nickname_)
                 );
 
                 if (r.empty()) {
-                    // 새 사용자 생성
+                    // 새 사용자 생성 - email에 더미 값 추가
+                    string dummy_email = nickname_ + "@chat.local";
                     r = txn.exec(
-                        "INSERT INTO Users (username) VALUES (" + txn.quote(nickname_) + ") RETURNING id"
+                        "INSERT INTO Users (username, email) VALUES ("
+                        + txn.quote(nickname_) + ", "
+                        + txn.quote(dummy_email) + ") RETURNING id::text"
                     );
                     if (!r.empty()) {
                         db_user_id_ = r[0][0].as<string>();
@@ -345,7 +401,7 @@ public:
                 // 세션 생성
                 txn.exec(
                     "INSERT INTO Sessions (user_id, status) VALUES ("
-                    + txn.quote(db_user_id_) + ", 'active')"
+                    + txn.quote(db_user_id_) + "::uuid, 'active')"
                 );
                 });
         }
@@ -374,7 +430,7 @@ public:
         }
     }
 
-    // 기존 코드 유지
+    
     void start_ping_timer() {
         auto self = shared_from_this();
         net::post(ws_.get_executor(), [self]() {
@@ -390,7 +446,7 @@ public:
             });
     }
 
-    // 기존 코드 유지
+    
     void close() {
         // 이미 종료 중이거나 종료되었으면 무시
         bool expected = false;
@@ -428,7 +484,7 @@ public:
                 shared_from_this()));
     }
 
-    // 기존 코드 유지
+    
     void send(const string& message) {
         // 메시지 복사본을 만들어 비동기 작업 동안 수명 보장
         shared_ptr<string> msg_copy = make_shared<string>(message);
@@ -440,18 +496,20 @@ public:
             });
     }
 
-    // 기존 코드 유지
     const string& getNickname() const {
         return nickname_;
     }
 
-    // 기존 코드 유지
     bool is_open() const {
         return ws_.is_open();
     }
 
+    const string& getDbUserId() const {
+        return db_user_id_;
+    }
+
 private:
-    // 기존 코드 유지
+    
     void queue_message(const string& message) {
         bool write_in_progress;
 
@@ -469,7 +527,7 @@ private:
         }
     }
 
-    // 기존 코드 유지
+    
     void do_write() {
         shared_ptr<string> message_ptr;
 
@@ -779,18 +837,27 @@ void ChatRoom::leave(shared_ptr<Session> session) {
 
 // ChatRoom::broadcast 구현 (DB 저장 기능 추가)
 void ChatRoom::broadcast(const string& message, shared_ptr<Session> sender) {
-    // 메시지를 DB에 저장 (새로 추가된 부분)
+    // 메시지를 DB에 저장
     try {
         ChatMessage chat_msg = ChatMessage::fromJson(message);
 
         // 별도 스레드에서 DB 저장 작업 실행
-        std::thread([chat_msg, this]() {
+        std::thread([chat_msg, this, sender]() {
             try {
-                if (chat_msg.saveToDatabase(this->chat_id_)) {
-                    ConsoleOut(L"[DB] 메시지 저장 성공");
+                if (sender) {
+                    string user_id = sender->getDbUserId();
+                    if (!user_id.empty()) {
+                        chat_msg.saveToDatabase(this->chat_id_, user_id);
+                        ConsoleOut(L"[DB] 메시지 저장 성공 (사용자: " + utf8_to_wstring(user_id) + L")");
+                    }
+                    else {
+                        chat_msg.saveToDatabase(this->chat_id_);
+                        ConsoleOut(L"[DB] 메시지 저장 성공 (시스템)");
+                    }
                 }
                 else {
-                    ConsoleErr(L"[DB] 메시지 저장 실패");
+                    chat_msg.saveToDatabase(this->chat_id_);
+                    ConsoleOut(L"[DB] 메시지 저장 성공 (시스템)");
                 }
             }
             catch (const std::exception& e) {
@@ -799,7 +866,6 @@ void ChatRoom::broadcast(const string& message, shared_ptr<Session> sender) {
             }).detach();
     }
     catch (const std::exception& e) {
-        // JSON 파싱 실패 등의 오류 처리
         ConsoleErr(utf8_to_wstring(std::string("[Error] 메시지 파싱 실패: ") + e.what()));
     }
 
@@ -818,7 +884,6 @@ void ChatRoom::broadcast(const string& message, shared_ptr<Session> sender) {
     for (auto& weak_session : targets) {
         if (auto session = weak_session.lock()) {
             try {
-                // 소켓이 열려있는지 확인 
                 if (!session->is_open()) continue;
                 session->send(message);
             }
@@ -888,77 +953,101 @@ public:
 
 private:
     // 클라이언트 연결 수락 (기존 코드 유지)
+    //void do_accept() {
+    //    // 다음 연결은 다른 strand에서 처리하도록 설정
+    //    int strand_idx = next_strand_index_++;
+    //    if (next_strand_index_ >= strands_.size()) {
+    //        next_strand_index_ = 0;  // 라운드 로빈 방식
+    //    }
+
+    //    // 해당 strand에서 비동기 수락 작업 진행
+    //    acceptor_.async_accept(
+    //        net::bind_executor(
+    //            strands_[strand_idx],
+    //            [this, strand_idx](beast::error_code ec, tcp::socket socket) {
+    //                if (!ec) {
+    //                    ConsoleOut(L"[Server] 클라이언트 연결됨 [Thread ID: " +
+    //                        to_wstring(hash<thread::id>{}(this_thread::get_id())) +
+    //                        L", Strand: " + to_wstring(strand_idx) + L"]");
+
+    //                    try {
+    //                        // 다른 strand에서 세션 시작
+    //                        int session_strand_idx = next_strand_index_++;
+    //                        if (next_strand_index_ >= strands_.size()) {
+    //                            next_strand_index_ = 0;
+    //                        }
+
+    //                        // 세션 생성
+    //                        auto session = make_shared<Session>(move(socket));
+
+    //                        // 다른 strand에서 세션 시작 작업 포스팅
+    //                        net::post(
+    //                            strands_[session_strand_idx],
+    //                            [this, session, session_strand_idx]() {
+    //                                try {
+    //                                    if (!session->is_open()) {
+    //                                        ConsoleErr(L"[Error] 세션이 이미 닫혔습니다.");
+    //                                        return;
+    //                                    }
+
+    //                                    ConsoleOut(L"[Session] 세션 시작 [Thread ID: " +
+    //                                        to_wstring(hash<thread::id>{}(this_thread::get_id())) +
+    //                                        L", Strand: " + to_wstring(session_strand_idx) + L"]");
+
+    //                                    // 명시적으로 세션의 시작 함수를 호출
+    //                                    session->start();
+    //                                }
+    //                                catch (const std::exception& e) {
+    //                                    ConsoleErr(L"[Error] 세션 시작 중 예외: " + utf8_to_wstring(e.what()));
+    //                                }
+    //                            });
+    //                    }
+    //                    catch (const std::exception& e) {
+    //                        ConsoleErr(L"[Error] 클라이언트 연결 처리 중 예외: " + utf8_to_wstring(e.what()));
+    //                    }
+    //                }
+    //                else {
+    //                    ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
+    //                }
+
+    //                // 다음 클라이언트 연결 대기 - 다른 strand에서 처리
+    //                // 여기에서 새로운 strand 인덱스를 사용하여 분산 처리
+    //                int next_accept_strand_idx = next_strand_index_++;
+    //                if (next_strand_index_ >= strands_.size()) {
+    //                    next_strand_index_ = 0;
+    //                }
+
+    //                // 다음 accept 작업을 다른 strand에 포스팅
+    //                net::post(
+    //                    strands_[next_accept_strand_idx],
+    //                    [this]() {
+    //                        do_accept();
+    //                    });
+    //            }));
+    //}
+
     void do_accept() {
-        // 다음 연결은 다른 strand에서 처리하도록 설정
-        int strand_idx = next_strand_index_++;
-        if (next_strand_index_ >= strands_.size()) {
-            next_strand_index_ = 0;  // 라운드 로빈 방식
-        }
-
-        // 해당 strand에서 비동기 수락 작업 진행
         acceptor_.async_accept(
-            net::bind_executor(
-                strands_[strand_idx],
-                [this, strand_idx](beast::error_code ec, tcp::socket socket) {
-                    if (!ec) {
-                        ConsoleOut(L"[Server] 클라이언트 연결됨 [Thread ID: " +
-                            to_wstring(hash<thread::id>{}(this_thread::get_id())) +
-                            L", Strand: " + to_wstring(strand_idx) + L"]");
+            [this](beast::error_code ec, tcp::socket socket) {
+                if (!ec) {
+                    ConsoleOut(L"[Server] 새 클라이언트 연결 수락됨");
 
-                        try {
-                            // 다른 strand에서 세션 시작
-                            int session_strand_idx = next_strand_index_++;
-                            if (next_strand_index_ >= strands_.size()) {
-                                next_strand_index_ = 0;
-                            }
-
-                            // 세션 생성
-                            auto session = make_shared<Session>(move(socket));
-
-                            // 다른 strand에서 세션 시작 작업 포스팅
-                            net::post(
-                                strands_[session_strand_idx],
-                                [this, session, session_strand_idx]() {
-                                    try {
-                                        if (!session->is_open()) {
-                                            ConsoleErr(L"[Error] 세션이 이미 닫혔습니다.");
-                                            return;
-                                        }
-
-                                        ConsoleOut(L"[Session] 세션 시작 [Thread ID: " +
-                                            to_wstring(hash<thread::id>{}(this_thread::get_id())) +
-                                            L", Strand: " + to_wstring(session_strand_idx) + L"]");
-
-                                        // 명시적으로 세션의 시작 함수를 호출
-                                        session->start();
-                                    }
-                                    catch (const std::exception& e) {
-                                        ConsoleErr(L"[Error] 세션 시작 중 예외: " + utf8_to_wstring(e.what()));
-                                    }
-                                });
-                        }
-                        catch (const std::exception& e) {
-                            ConsoleErr(L"[Error] 클라이언트 연결 처리 중 예외: " + utf8_to_wstring(e.what()));
-                        }
+                    // 세션 생성 및 시작
+                    try {
+                        auto session = make_shared<Session>(move(socket));
+                        session->start();
                     }
-                    else {
-                        ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
+                    catch (const std::exception& e) {
+                        ConsoleErr(L"[Error] 세션 생성 실패: " + utf8_to_wstring(e.what()));
                     }
+                }
+                else {
+                    ConsoleErr(L"[Error] Accept: " + utf8_to_wstring(ec.message()));
+                }
 
-                    // 다음 클라이언트 연결 대기 - 다른 strand에서 처리
-                    // 여기에서 새로운 strand 인덱스를 사용하여 분산 처리
-                    int next_accept_strand_idx = next_strand_index_++;
-                    if (next_strand_index_ >= strands_.size()) {
-                        next_strand_index_ = 0;
-                    }
-
-                    // 다음 accept 작업을 다른 strand에 포스팅
-                    net::post(
-                        strands_[next_accept_strand_idx],
-                        [this]() {
-                            do_accept();
-                        });
-                }));
+                // 다음 연결 대기
+                do_accept();
+            });
     }
 };
 
@@ -983,6 +1072,8 @@ int main() {
             // 연결 테스트
             if (DatabaseManager::getInstance().testConnection()) {
                 ConsoleOut(L"[DB] PostgreSQL 연결 테스트 성공");
+
+                g_chatRoom.initialize(); // 채팅방 초기화
             }
             else {
                 ConsoleErr(L"[DB] PostgreSQL 연결 테스트 실패");
