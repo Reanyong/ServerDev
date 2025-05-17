@@ -151,8 +151,14 @@
     <ClCompile Include="broadcast_websocket.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="DatabaseManager.cpp" />
-    <ClCompile Include="db_integration_chat.cpp" />
+    <ClCompile Include="chat\ChatMessage.cpp" />
+    <ClCompile Include="chat\ChatRoom.cpp" />
+    <ClCompile Include="config\ServerConfig.cpp" />
+    <ClCompile Include="db\ChatRepository.cpp" />
+    <ClCompile Include="db\DatabaseManager.cpp" />
+    <ClCompile Include="db_integration_chat.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="echo_websocket.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -161,9 +167,21 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="net\Session.cpp" />
+    <ClCompile Include="net\WebSocketServer.cpp" />
+    <ClCompile Include="utils\ConsoleHelper.cpp" />
+    <ClCompile Include="utils\StringUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DatabaseManager.h" />
+    <ClInclude Include="chat\ChatMessage.h" />
+    <ClInclude Include="chat\ChatRoom.h" />
+    <ClInclude Include="config\ServerConfig.h" />
+    <ClInclude Include="db\ChatRepository.h" />
+    <ClInclude Include="db\DatabaseManager.h" />
+    <ClInclude Include="net\Session.h" />
+    <ClInclude Include="net\WebSocketServer.h" />
+    <ClInclude Include="utils\ConsoleHelper.h" />
+    <ClInclude Include="utils\StringUtils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
