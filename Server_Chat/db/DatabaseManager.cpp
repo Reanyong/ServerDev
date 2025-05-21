@@ -1,13 +1,10 @@
 ﻿// DatabaseManager.cpp
 #include "DatabaseManager.h"
+#include "../utils/StringUtils.h"
+#include "../utils/ConsoleHelper.h"
 #include <iostream>
 #include <string>
 #include <Windows.h>
-
-// 외부 함수 선언
-extern std::wstring utf8_to_wstring(const std::string& str);
-extern void ConsoleOut(const std::wstring& message);
-extern void ConsoleErr(const std::wstring& message);
 
 // 싱글톤 인스턴스 초기화
 std::unique_ptr<DatabaseManager> DatabaseManager::instance_ = nullptr;
@@ -19,10 +16,10 @@ DatabaseManager::DatabaseManager(const std::string& connection_string)
     try {
         // DB 연결 시도
         conn_ = std::make_unique<pqxx::connection>(connection_string);
-        ConsoleOut(L"[DB] PostgreSQL 연결 성공");
+        ConsoleHelper::Out(L"[DB] PostgreSQL 연결 성공");
     }
     catch (const std::exception& e) {
-        ConsoleErr(utf8_to_wstring(std::string("PostgreSQL 연결 실패: ") + e.what()));
+        ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("PostgreSQL 연결 실패: ") + e.what()));
         throw; // 초기화 실패 시 예외 전파
     }
 }
@@ -35,11 +32,11 @@ DatabaseManager::~DatabaseManager() {
 #ifdef NDEBUG
             conn_->close();
 #endif
-            ConsoleOut(L"[DB] PostgreSQL 연결 종료");
+            ConsoleHelper::Out(L"[DB] PostgreSQL 연결 종료");
         }
     }
     catch (const std::exception& e) {
-        ConsoleErr(utf8_to_wstring(std::string("PostgreSQL 연결 종료 실패: ") + e.what()));
+        ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("PostgreSQL 연결 종료 실패: ") + e.what()));
     }
 }
 
@@ -76,7 +73,7 @@ bool DatabaseManager::testConnection() {
         return r.size() > 0 && r[0][0].as<int>() == 1;
     }
     catch (const std::exception& e) {
-        ConsoleErr(utf8_to_wstring(std::string("DB 연결 테스트 실패: ") + e.what()));
+        ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("DB 연결 테스트 실패: ") + e.what()));
         return false;
     }
 }
@@ -96,7 +93,7 @@ pqxx::result DatabaseManager::executeQuery(const std::string& query) {
         txn.commit();
     }
     catch (const std::exception& e) {
-        ConsoleErr(utf8_to_wstring(std::string("쿼리 실행 실패: ") + e.what()));
+        ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("쿼리 실행 실패: ") + e.what()));
         throw; // 쿼리 실패 시 예외 전파
     }
     return result;

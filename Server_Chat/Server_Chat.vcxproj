@@ -113,7 +113,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_WIN32_WINNT=0x0601;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
@@ -151,6 +151,7 @@
     <ClCompile Include="broadcast_websocket.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="ChatServerImpl.cpp" />
     <ClCompile Include="chat\ChatMessage.cpp" />
     <ClCompile Include="chat\ChatRoom.cpp" />
     <ClCompile Include="config\ServerConfig.cpp" />
@@ -158,11 +159,13 @@
     <ClCompile Include="db\DatabaseManager.cpp" />
     <ClCompile Include="db_integration_chat.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="echo_websocket.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="multithread_websocket_echo.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -173,11 +176,13 @@
     <ClCompile Include="utils\StringUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ChatServerImpl.h" />
     <ClInclude Include="chat\ChatMessage.h" />
     <ClInclude Include="chat\ChatRoom.h" />
     <ClInclude Include="config\ServerConfig.h" />
     <ClInclude Include="db\ChatRepository.h" />
     <ClInclude Include="db\DatabaseManager.h" />
+    <ClInclude Include="IChatServer.h" />
     <ClInclude Include="net\Session.h" />
     <ClInclude Include="net\WebSocketServer.h" />
     <ClInclude Include="utils\ConsoleHelper.h" />

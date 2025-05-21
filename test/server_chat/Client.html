@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>채팅 서버 테스트 클라이언트</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        #messageArea { height: 400px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+        #messageForm { display: flex; }
+        #messageInput { flex: 1; padding: 8px; }
+        button { padding: 8px 16px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        .system { color: blue; }
+        .join { color: green; }
+        .leave { color: red; }
+        .whisper { color: purple; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>채팅 서버 테스트 클라이언트</h1>
+    <div id="connectionStatus">연결 상태: 연결되지 않음</div>
+    <div id="messageArea"></div>
+    <form id="messageForm">
+        <input type="text" id="messageInput" placeholder="메시지를 입력하세요..." autocomplete="off">
+        <button type="submit">전송</button>
+    </form>
+
+    <script>
+        const messageArea = document.getElementById('messageArea');
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        let socket;
+
+        function connect() {
+            // WebSocket 연결
+            socket = new WebSocket('ws://localhost:8080');
+
+            // 연결 이벤트
+            socket.onopen = function(e) {
+                connectionStatus.textContent = '연결 상태: 연결됨';
+                connectionStatus.style.color = 'green';
+                addMessage('시스템', '서버에 연결되었습니다.', 'system');
+            };
+
+            // 메시지 수신 이벤트
+            socket.onmessage = function(event) {
+                console.log(`받은 메시지:`, event.data);
+                
+                try {
+                    const data = JSON.parse(event.data);
+                    const nickname = data.nickname;
+                    const content = data.content;
+                    const type = data.type;
+                    
+                    let messageType = 'normal';
+                    
+                    // 메시지 타입에 따라 스타일 적용
+                    switch(type) {
+                        case 0: // JOIN
+                            messageType = 'join';
+                            break;
+                        case 1: // LEAVE
+                            messageType = 'leave';
+                            break;
+                        case 2: // CHAT
+                            messageType = 'normal';
+                            break;
+                        case 3: // SYSTEM
+                            messageType = 'system';
+                            break;
+                        case 4: // WHISPER
+                            messageType = 'whisper';
+                            break;
+                    }
+                    
+                    addMessage(nickname, content, messageType);
+                } catch (e) {
+                    console.error("JSON 파싱 실패:", e);
+                    addMessage('오류', '메시지 처리 중 오류가 발생했습니다.', 'system');
+                }
+            };
+
+            // 연결 종료 이벤트
+            socket.onclose = function(event) {
+                connectionStatus.textContent = '연결 상태: 연결 끊김';
+                connectionStatus.style.color = 'red';
+                
+                if (event.wasClean) {
+                    addMessage('시스템', `연결이 정상적으로 종료되었습니다. (코드: ${event.code})`, 'system');
+                } else {
+                    addMessage('시스템', '연결이 비정상적으로 종료되었습니다.', 'system');
+                }
+                
+                // 5초 후 재연결 시도
+                setTimeout(connect, 5000);
+            };
+
+            // 오류 이벤트
+            socket.onerror = function(error) {
+                connectionStatus.textContent = '연결 상태: 오류 발생';
+                connectionStatus.style.color = 'red';
+                addMessage('오류', '연결 중 오류가 발생했습니다.', 'system');
+            };
+        }
+
+        function addMessage(sender, message, type = 'normal') {
+            const messageElement = document.createElement('div');
+            messageElement.className = type;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            
+            if (type === 'system') {
+                messageElement.textContent = `[${timestamp}] ${message}`;
+            } else if (type === 'join' || type === 'leave') {
+                messageElement.textContent = `[${timestamp}] ${message}`;
+            } else if (type === 'whisper') {
+                messageElement.textContent = `[${timestamp}] [귓속말] ${sender}: ${message}`;
+            } else {
+                messageElement.textContent = `[${timestamp}] ${sender}: ${message}`;
+            }
+            
+            messageArea.appendChild(messageElement);
+            messageArea.scrollTop = messageArea.scrollHeight;
+        }
+
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (message && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(message);
+                messageInput.value = '';
+            }
+        });
+
+        // 페이지 로드 시 연결
+        connect();
+    </script>
+</body>
+</html>

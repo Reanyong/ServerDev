@@ -72,6 +72,12 @@
     <ClCompile Include="config\ServerConfig.cpp">
       <Filter>config</Filter>
     </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatServerImpl.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="db\ChatRepository.h">
@@ -100,6 +106,12 @@
     </ClInclude>
     <ClInclude Include="config\ServerConfig.h">
       <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="ChatServerImpl.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="IChatServer.h">
+      <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
