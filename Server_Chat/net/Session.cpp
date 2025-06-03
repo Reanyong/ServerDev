@@ -8,14 +8,18 @@
 #include <chrono>
 #include <iostream>
 
-Session::Session(tcp::socket socket)
-    : ws_(std::move(socket)) {
+Session::Session(tcp::socket socket, std::shared_ptr<ChatRoom> chat_room, std::weak_ptr<WebSocketServer> ws_server)
+    : ws_(std::move(socket)), chat_room_(chat_room), ws_server_(ws_server) {
     // WebSocket 옵션 설정
     ws_.set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
 
+    // 자동 pong 응답 설정
+    ws_.auto_fragment(true);
+    ws_.read_message_max(64 * 1024); // 64KB 제한
+
     // 기본 사용자 정보 설정
-    user_id_ = 0;  // 실제 ID는 채팅방에서 할당
-    nickname_ = "Guest";  // 기본 닉네임
+    user_id_ = 0;
+    nickname_ = "Guest";
 }
 
 Session::~Session() {
@@ -115,14 +119,14 @@ bool Session::registerUser() {
         return db.executeTransaction([&](pqxx::work& txn) {
             // 사용자가 존재하는지 확인
             pqxx::result r = txn.exec(
-                "SELECT id::text FROM Users WHERE username = " + txn.quote(nickname_)
+                "SELECT id::text FROM users WHERE username = " + txn.quote(nickname_)
             );
 
             if (r.empty()) {
                 // 새 사용자 생성 - email에 더미 값 추가
                 std::string dummy_email = nickname_ + "@chat.local";
                 r = txn.exec(
-                    "INSERT INTO Users (username, email) VALUES ("
+                    "INSERT INTO users (username, email) VALUES ("
                     + txn.quote(nickname_) + ", "
                     + txn.quote(dummy_email) + ") RETURNING id::text"
                 );
@@ -136,7 +140,7 @@ bool Session::registerUser() {
 
             // 세션 생성
             txn.exec(
-                "INSERT INTO Sessions (user_id, status) VALUES ("
+                "INSERT INTO sessions (user_id, status) VALUES ("
                 + txn.quote(db_user_id_) + "::uuid, 'active')"
             );
             });
@@ -154,7 +158,7 @@ bool Session::endSession() {
         auto& db = DatabaseManager::getInstance();
         return db.executeTransaction([&](pqxx::work& txn) {
             txn.exec(
-                "UPDATE Sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP "
+                "UPDATE sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP "
                 "WHERE user_id = " + txn.quote(db_user_id_) + "::uuid AND status = 'active'"
             );
             });
@@ -222,21 +226,21 @@ void Session::on_write(beast::error_code ec, size_t bytes_transferred, std::shar
         // 오류 코드를 세부적으로 분석
         std::string error_type;
         if (ec == boost::asio::error::operation_aborted) {
-            error_type = "작업 취소됨";
+            // 작업 취소는 정상적인 종료 과정의 일부일 수 있으므로 디버그 레벨로 로깅
+            ConsoleHelper::Debug("[Debug] Write: 작업 취소됨");
         }
         else if (ec == boost::beast::websocket::error::closed) {
             error_type = "WebSocket 연결 닫힘";
+            ConsoleHelper::Error("[Error] Write: " + error_type);
         }
         else if (ec == boost::asio::error::eof) {
             error_type = "연결 종료 (EOF)";
+            ConsoleHelper::Error("[Error] Write: " + error_type);
         }
         else {
-            // 일반 오류 메시지
             error_type = "오류: " + ec.message();
+            ConsoleHelper::Error("[Error] Write: " + error_type);
         }
-
-        // 오류 출력 - 스레드 ID와 함께
-        ConsoleHelper::Error("[Error] Write: " + error_type);
 
         // 쓰기 상태 초기화
         std::lock_guard<std::mutex> lock(write_mutex_);
@@ -254,7 +258,22 @@ void Session::on_accept(beast::error_code ec) {
         return;
     }
 
-    ConsoleHelper::ThreadOut("[Session] WebSocket 연결 성공");
+    ConsoleHelper::ThreadOut("[Session] WebSocket 핸드셰이크 성공");
+
+    // 연결 상태 확인
+    if (!ws_.is_open()) {
+        ConsoleHelper::Error("[Session] WebSocket이 핸드셰이크 후 바로 닫혔습니다.");
+        return;
+    }
+
+    // 고유 ID 할당 (ChatRoom에서 생성)
+    if (chat_room_) {
+        int userId = chat_room_->generateUserId();
+        nickname_ = "User" + std::to_string(userId);
+        user_id_ = userId;
+    }
+
+    ConsoleHelper::ThreadOut("[Session] 사용자 등록 시작...");
 
     // 사용자 DB 등록
     try {
@@ -262,12 +281,37 @@ void Session::on_accept(beast::error_code ec) {
             ConsoleHelper::Out("[DB] 사용자 등록 및 세션 시작 성공: " + nickname_);
         }
         else {
-            ConsoleHelper::Error("[DB] 사용자 등록 실패");
+            ConsoleHelper::Error("[DB] 사용자 등록 실패 - DB 없이 계속 진행");
         }
     }
     catch (const std::exception& e) {
-        ConsoleHelper::Error("[DB] 사용자 등록 중 예외: " + std::string(e.what()));
+        ConsoleHelper::Error("[DB] 사용자 등록 중 예외: " + std::string(e.what()) + " - 계속 진행");
     }
+
+    // WebSocket 준비 완료 후 ChatRoom 입장 처리
+    if (chat_room_) {
+        try {
+            // 채팅방 입장
+            chat_room_->join(shared_from_this());
+            
+            // Welcome 메시지 전송 (먼저 개별 메시지)
+            auto welcome_msg = ChatMessage::createSystemMessage(
+                "환영합니다, " + nickname_ + "님! 현재 " + std::to_string(chat_room_->getSessionCount()) + "명이 접속 중입니다.\n"
+                "명령어 안내: /nick [새닉네임] - 닉네임 변경, /help - 도움말");
+            send(welcome_msg.toJson());
+            
+            // 입장 메시지 브로드캐스트
+            auto join_msg = ChatMessage::createJoinMessage(nickname_);
+            chat_room_->broadcast(join_msg.toJson());
+            
+            ConsoleHelper::Out("[Session] ChatRoom 입장 완료: " + nickname_);
+        }
+        catch (const std::exception& e) {
+            ConsoleHelper::Error("[Session] ChatRoom 입장 실패: " + std::string(e.what()));
+        }
+    }
+
+    ConsoleHelper::ThreadOut("[Session] 읽기 시작...");
 
     // 비동기적으로 데이터 수신 대기
     do_read();
@@ -281,6 +325,23 @@ void Session::handle_disconnect(beast::error_code ec) {
     }
 
     try {
+        // ChatRoom에서 퇴장 처리
+        if (chat_room_) {
+            try {
+                // 퇴장 메시지 브로드캐스트
+                auto leave_msg = ChatMessage::createLeaveMessage(nickname_);
+                chat_room_->broadcast(leave_msg.toJson(), shared_from_this());
+
+                // 채팅방에서 제거
+                chat_room_->leave(shared_from_this());
+                
+                ConsoleHelper::Out("[Session] ChatRoom 퇴장 완료: " + nickname_);
+            }
+            catch (const std::exception& e) {
+                ConsoleHelper::Error("[Session] ChatRoom 퇴장 중 오류: " + std::string(e.what()));
+            }
+        }
+
         // DB에 세션 종료 기록
         try {
             if (endSession()) {
@@ -369,9 +430,11 @@ void Session::on_read(beast::error_code ec, size_t bytes_transferred) {
     try {
         // 명령어 처리
         if (!processCommand(message)) {
-            // 일반 채팅 메시지
-            auto chat_msg = ChatMessage::createChatMessage(nickname_, message);
-            // 메시지 브로드캐스트는 ChatRoom이 처리
+            // 일반 채팅 메시지 - ChatRoom을 통해 브로드캐스트
+            if (chat_room_) {
+                auto chat_msg = ChatMessage::createChatMessage(nickname_, message);
+                chat_room_->broadcast(chat_msg.toJson());
+            }
         }
     }
     catch (const std::exception& e) {
@@ -453,7 +516,7 @@ void Session::handleNicknameChange(const std::string& new_nickname) {
             auto& db = DatabaseManager::getInstance();
             db.executeTransaction([&](pqxx::work& txn) {
                 txn.exec(
-                    "UPDATE Users SET username = " + txn.quote(new_nickname) +
+                    "UPDATE users SET username = " + txn.quote(new_nickname) +
                     " WHERE id = " + txn.quote(db_user_id_) + "::uuid"
                 );
                 });
@@ -462,12 +525,12 @@ void Session::handleNicknameChange(const std::string& new_nickname) {
         // 닉네임 변경
         nickname_ = new_nickname;
 
-        // 닉네임 변경 알림
-        auto system_msg = ChatMessage::createSystemMessage(
-            old_nickname + "님이 " + nickname_ + "으로 닉네임을 변경했습니다.");
-
-        // ChatRoom에 알림
-        // 여기서는 직접 broadcast 호출이 아닌, 외부 콜백으로 처리
+        // 닉네임 변경 알림을 ChatRoom을 통해 브로드캐스트
+        if (chat_room_) {
+            auto system_msg = ChatMessage::createSystemMessage(
+                old_nickname + "님이 " + nickname_ + "으로 닉네임을 변경했습니다.");
+            chat_room_->broadcast(system_msg.toJson());
+        }
 
         ConsoleHelper::Out("[Session] 닉네임 변경: " + old_nickname + " -> " + nickname_);
 
@@ -497,9 +560,14 @@ void Session::handleWhisperCommand(const std::string& target_and_message) {
     std::string target = target_and_message.substr(0, spacePos);
     std::string whisper_message = target_and_message.substr(spacePos + 1);
 
-    // 귓속말 처리는 ChatRoom에서 담당
-    // 여기서는 직접 whisper 호출이 아닌, 외부 콜백으로 처리
+    // 귓속말을 ChatRoom을 통해 처리
+    if (chat_room_) {
+        auto whisper_msg = ChatMessage::createWhisperMessage(nickname_, target, whisper_message);
+        // ChatRoom의 whisper 메서드를 통해 대상에게만 전송
+        // chat_room_->whisper(target, whisper_msg.toJson());
+        // 임시로 브로드캐스트로 처리 (실제로는 whisper 메서드 구현 필요)
+        chat_room_->broadcast("[귓속말] " + nickname_ + " -> " + target + ": " + whisper_message);
+    }
 
-    // 템플릿 코드이므로 실제 귓속말 전송 로직은 ChatServerImpl에서 구현
     ConsoleHelper::Out("[Session] 귓속말 요청: " + nickname_ + " -> " + target + ": " + whisper_message);
 }

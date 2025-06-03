@@ -55,13 +55,16 @@ bool ServerConfig::loadFromFile(const std::string& filename) {
 }
 
 std::string ServerConfig::getDbConnectionString() const {
+    // 포트 번호를 문자열로 명시적 변환
+    std::string port_str = std::to_string(db_port_);
+
     std::stringstream ss;
     ss << "host=" << db_host_
-        << " port=" << db_port_
+        << " port=" << port_str  // 명시적 문자열 변환
         << " dbname=" << db_name_
         << " user=" << db_user_
         << " password=" << db_password_;
-    
+
     std::string conn_str = ss.str();
     std::cout << "[DEBUG] DB 연결 문자열: " << conn_str << std::endl;
     return conn_str;

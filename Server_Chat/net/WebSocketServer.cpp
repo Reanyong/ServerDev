@@ -144,6 +144,25 @@ std::string WebSocketServer::getServerAddress() const {
     }
 }
 
+void WebSocketServer::registerSession(std::shared_ptr<Session> session) {
+    if (session) {
+        connection_count_++;
+        ConsoleHelper::ThreadOut("[Server] 세션 등록 완료, 연결 수: " + std::to_string(connection_count_));
+    }
+}
+
+void WebSocketServer::unregisterSession(std::shared_ptr<Session> session) {
+    if (session && connection_count_ > 0) {
+        connection_count_--;
+        ConsoleHelper::ThreadOut("[Server] 세션 해제 완료, 연결 수: " + std::to_string(connection_count_));
+        
+        // 연결 해제 콜백 호출
+        if (onClientDisconnected_) {
+            onClientDisconnected_(session);
+        }
+    }
+}
+
 void WebSocketServer::do_accept() {
     // 서버가 종료 중이면 더 이상 연결을 수락하지 않음
     if (stopping_) {
@@ -175,34 +194,32 @@ void WebSocketServer::do_accept() {
                             next_strand_index_ = 0;
                         }
 
-                        // 세션 생성
-                        auto session = std::make_shared<Session>(std::move(socket));
+                        // 세션 생성 - ChatRoom을 Session에 전달
+                        auto session = std::make_shared<Session>(std::move(socket), chat_room_);
 
-                        // 세션 시작
-                        connection_count_++;
-
-                        // 콜백 호출
-                        if (onClientConnected_) {
-                            onClientConnected_(session);
-                        }
-
-                        // 다른 스트랜드에서 세션 시작 작업 포스팅
+                        // 다른 스트랜드에서 세션 시작 작업 포스팅 (connection_count는 성공 시에만 증가)
                         net::post(
                             strands_[session_strand_idx],
                             [this, session, session_strand_idx]() {
                                 try {
-                                    if (!session->is_open()) {
-                                        ConsoleHelper::Error("[Error] 세션이 이미 닫혔습니다.");
-                                        return;
-                                    }
+                                    ConsoleHelper::ThreadOut("[Session] 세션 시작 시도");
 
-                                    ConsoleHelper::ThreadOut("[Session] 세션 시작");
-
-                                    // 명시적으로 세션의 시작 함수를 호출
+                                    // 명시적으로 세션의 시작 함수를 호출 (핸드셰이크 수행)
                                     session->start();
+                                    
+                                    // 연결 성공 시 카운트 증가 (Session에서 처리하도록 변경)
+                                    // connection_count_++;
+                                    
+                                    // WebSocket 핸드셰이크 완료 후 콜백 호출 (로그용)
+                                    if (onClientConnected_) {
+                                        onClientConnected_(session);
+                                    }
+                                    
+                                    ConsoleHelper::ThreadOut("[Session] 세션 시작 완료");
                                 }
                                 catch (const std::exception& e) {
                                     ConsoleHelper::Error("[Error] 세션 시작 중 예외: " + std::string(e.what()));
+                                    // 예외 발생 시 연결 카운트 증가하지 않음
                                 }
                             });
                     }

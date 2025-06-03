@@ -1,106 +1,293 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>채팅 서버 테스트 클라이언트</title>
+    <title>WebSocket 연결 디버깅 클라이언트</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-        #messageArea { height: 400px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
-        #messageForm { display: flex; }
-        #messageInput { flex: 1; padding: 8px; }
-        button { padding: 8px 16px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
-        .system { color: blue; }
-        .join { color: green; }
-        .leave { color: red; }
-        .whisper { color: purple; font-style: italic; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-panel {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .status-connected { border-left: 4px solid #28a745; }
+        .status-disconnected { border-left: 4px solid #dc3545; }
+        .status-connecting { border-left: 4px solid #ffc107; }
+        
+        #messageArea { 
+            height: 400px; 
+            border: 1px solid #ccc; 
+            overflow-y: scroll; 
+            padding: 10px; 
+            margin-bottom: 10px;
+            background: #fafafa;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        #messageForm { 
+            display: flex; 
+            gap: 10px;
+        }
+        #messageInput { 
+            flex: 1; 
+            padding: 10px; 
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button { 
+            padding: 10px 20px; 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px;
+            cursor: pointer; 
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { 
+            background-color: #6c757d; 
+            cursor: not-allowed; 
+        }
+        
+        .system { color: #007bff; font-weight: bold; }
+        .join { color: #28a745; }
+        .leave { color: #dc3545; }
+        .whisper { color: #6f42c1; font-style: italic; }
+        .error { color: #dc3545; font-weight: bold; }
+        .debug { color: #6c757d; font-style: italic; }
+        
+        .connection-controls {
+            margin-bottom: 20px;
+        }
+        .connection-controls input {
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        .debug-info {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
-    <h1>채팅 서버 테스트 클라이언트</h1>
-    <div id="connectionStatus">연결 상태: 연결되지 않음</div>
-    <div id="messageArea"></div>
-    <form id="messageForm">
-        <input type="text" id="messageInput" placeholder="메시지를 입력하세요..." autocomplete="off">
-        <button type="submit">전송</button>
-    </form>
+    <div class="container">
+        <h1>WebSocket 연결 디버깅 클라이언트</h1>
+        
+        <div class="connection-controls">
+            <input type="text" id="serverUrl" value="ws://localhost:8080" placeholder="서버 URL">
+            <button id="connectBtn" onclick="connect()">연결</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>연결 해제</button>
+        </div>
+        
+        <div id="connectionStatus" class="status-panel status-disconnected">
+            <strong>연결 상태:</strong> 연결되지 않음
+        </div>
+        
+        <div class="debug-info">
+            <strong>디버그 정보:</strong><br>
+            <span id="debugInfo">서버 연결을 시도하세요.</span>
+        </div>
+        
+        <div id="messageArea"></div>
+        
+        <form id="messageForm">
+            <input type="text" id="messageInput" placeholder="메시지를 입력하세요... (예: /nick 새닉네임, /help)" autocomplete="off" disabled>
+            <button type="submit" id="sendBtn" disabled>전송</button>
+        </form>
+        
+        <div style="margin-top: 20px; font-size: 12px; color: #6c757d;">
+            <strong>사용 가능한 명령어:</strong><br>
+            • /nick &lt;닉네임&gt; - 닉네임 변경<br>
+            • /whisper &lt;대상&gt; &lt;메시지&gt; - 귓속말 (또는 /w)<br>
+            • /help - 도움말 표시
+        </div>
+    </div>
 
     <script>
         const messageArea = document.getElementById('messageArea');
         const messageForm = document.getElementById('messageForm');
         const messageInput = document.getElementById('messageInput');
         const connectionStatus = document.getElementById('connectionStatus');
+        const debugInfo = document.getElementById('debugInfo');
+        const serverUrl = document.getElementById('serverUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendBtn = document.getElementById('sendBtn');
         
         let socket;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function updateConnectionStatus(status, className, debugMsg) {
+            connectionStatus.innerHTML = `<strong>연결 상태:</strong> ${status}`;
+            connectionStatus.className = `status-panel ${className}`;
+            debugInfo.textContent = debugMsg;
+        }
 
         function connect() {
-            // WebSocket 연결
-            socket = new WebSocket('ws://localhost:8080');
+            const url = serverUrl.value.trim();
+            if (!url) {
+                addMessage('오류', 'URL을 입력하세요.', 'error');
+                return;
+            }
 
-            // 연결 이벤트
-            socket.onopen = function(e) {
-                connectionStatus.textContent = '연결 상태: 연결됨';
-                connectionStatus.style.color = 'green';
-                addMessage('시스템', '서버에 연결되었습니다.', 'system');
-            };
+            updateConnectionStatus('연결 중...', 'status-connecting', `${url}에 연결을 시도하고 있습니다...`);
+            
+            try {
+                // 기존 연결이 있으면 정리
+                if (socket) {
+                    socket.close();
+                }
 
-            // 메시지 수신 이벤트
-            socket.onmessage = function(event) {
-                console.log(`받은 메시지:`, event.data);
-                
-                try {
-                    const data = JSON.parse(event.data);
-                    const nickname = data.nickname;
-                    const content = data.content;
-                    const type = data.type;
+                // WebSocket 연결
+                socket = new WebSocket(url);
+                addMessage('디버그', `WebSocket 객체 생성됨: ${url}`, 'debug');
+
+                // 연결 타임아웃 설정 (30초로 증가)
+                const connectionTimeout = setTimeout(() => {
+                    if (socket.readyState === WebSocket.CONNECTING) {
+                        addMessage('오류', '연결 타임아웃 (30초)', 'error');
+                        socket.close();
+                    }
+                }, 30000);
+
+                // 연결 성공 이벤트
+                socket.onopen = function(e) {
+                    clearTimeout(connectionTimeout);
+                    reconnectAttempts = 0;
+                    updateConnectionStatus('연결됨', 'status-connected', '서버와 성공적으로 연결되었습니다.');
                     
-                    let messageType = 'normal';
+                    addMessage('시스템', '서버에 연결되었습니다. 서버 응답을 기다리는 중...', 'system');
+                    addMessage('디버그', `ReadyState: ${socket.readyState} (OPEN)`, 'debug');
                     
-                    // 메시지 타입에 따라 스타일 적용
-                    switch(type) {
-                        case 0: // JOIN
-                            messageType = 'join';
-                            break;
-                        case 1: // LEAVE
-                            messageType = 'leave';
-                            break;
-                        case 2: // CHAT
-                            messageType = 'normal';
-                            break;
-                        case 3: // SYSTEM
-                            messageType = 'system';
-                            break;
-                        case 4: // WHISPER
-                            messageType = 'whisper';
-                            break;
+                    // UI 활성화는 첫 번째 메시지를 받은 후에 처리
+                    // connectBtn.disabled = true;
+                    // disconnectBtn.disabled = false;
+                    // messageInput.disabled = false;
+                    // sendBtn.disabled = false;
+                    // messageInput.focus();
+                };
+
+                // 메시지 수신 이벤트
+                socket.onmessage = function(event) {
+                    addMessage('디버그', `원본 데이터: ${event.data}`, 'debug');
+                    
+                    // UI가 아직 활성화되지 않았다면 활성화
+                    if (connectBtn.disabled === false) {
+                        connectBtn.disabled = true;
+                        disconnectBtn.disabled = false;
+                        messageInput.disabled = false;
+                        sendBtn.disabled = false;
+                        messageInput.focus();
+                        addMessage('시스템', 'UI가 활성화되었습니다. 채팅을 시작할 수 있습니다.', 'system');
                     }
                     
-                    addMessage(nickname, content, messageType);
-                } catch (e) {
-                    console.error("JSON 파싱 실패:", e);
-                    addMessage('오류', '메시지 처리 중 오류가 발생했습니다.', 'system');
-                }
-            };
+                    try {
+                        const data = JSON.parse(event.data);
+                        const nickname = data.nickname || '알 수 없음';
+                        const content = data.content || '';
+                        const type = data.type;
+                        
+                        let messageType = 'normal';
+                        
+                        // 메시지 타입에 따라 스타일 적용
+                        switch(type) {
+                            case 0: // JOIN
+                                messageType = 'join';
+                                break;
+                            case 1: // LEAVE
+                                messageType = 'leave';
+                                break;
+                            case 2: // CHAT
+                                messageType = 'normal';
+                                break;
+                            case 3: // SYSTEM
+                                messageType = 'system';
+                                break;
+                            case 4: // WHISPER
+                                messageType = 'whisper';
+                                break;
+                            default:
+                                messageType = 'normal';
+                        }
+                        
+                        addMessage(nickname, content, messageType);
+                    } catch (e) {
+                        addMessage('오류', `JSON 파싱 실패: ${e.message}`, 'error');
+                        addMessage('디버그', `파싱 실패한 데이터: ${event.data}`, 'debug');
+                    }
+                };
 
-            // 연결 종료 이벤트
-            socket.onclose = function(event) {
-                connectionStatus.textContent = '연결 상태: 연결 끊김';
-                connectionStatus.style.color = 'red';
-                
-                if (event.wasClean) {
-                    addMessage('시스템', `연결이 정상적으로 종료되었습니다. (코드: ${event.code})`, 'system');
-                } else {
-                    addMessage('시스템', '연결이 비정상적으로 종료되었습니다.', 'system');
-                }
-                
-                // 5초 후 재연결 시도
-                setTimeout(connect, 5000);
-            };
+                // 연결 종료 이벤트
+                socket.onclose = function(event) {
+                    clearTimeout(connectionTimeout);
+                    updateConnectionStatus('연결 끊김', 'status-disconnected', 
+                        `연결이 종료되었습니다. 코드: ${event.code}, 이유: ${event.reason || '없음'}`);
+                    
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                    
+                    if (event.wasClean) {
+                        addMessage('시스템', `연결이 정상적으로 종료되었습니다. (코드: ${event.code})`, 'system');
+                    } else {
+                        addMessage('시스템', `연결이 비정상적으로 종료되었습니다. (코드: ${event.code})`, 'error');
+                        
+                        // 자동 재연결 시도
+                        if (reconnectAttempts < maxReconnectAttempts) {
+                            reconnectAttempts++;
+                            const delay = 2000; // 고정 2초 간격으로 변경
+                            addMessage('시스템', `${delay/1000}초 후 재연결 시도 (${reconnectAttempts}/${maxReconnectAttempts})...`, 'system');
+                            setTimeout(() => {
+                                if (socket.readyState === WebSocket.CLOSED) {
+                                    connect();
+                                }
+                            }, delay);
+                        }
+                    }
+                    
+                    addMessage('디버그', `ReadyState: ${socket.readyState} (CLOSED)`, 'debug');
+                };
 
-            // 오류 이벤트
-            socket.onerror = function(error) {
-                connectionStatus.textContent = '연결 상태: 오류 발생';
-                connectionStatus.style.color = 'red';
-                addMessage('오류', '연결 중 오류가 발생했습니다.', 'system');
-            };
+                // 오류 이벤트
+                socket.onerror = function(error) {
+                    updateConnectionStatus('오류 발생', 'status-disconnected', '연결 중 오류가 발생했습니다.');
+                    addMessage('오류', 'WebSocket 연결 중 오류가 발생했습니다.', 'error');
+                    addMessage('디버그', `Error object: ${JSON.stringify(error)}`, 'debug');
+                };
+
+            } catch (e) {
+                addMessage('오류', `WebSocket 생성 실패: ${e.message}`, 'error');
+                updateConnectionStatus('생성 실패', 'status-disconnected', `WebSocket 객체 생성에 실패했습니다: ${e.message}`);
+            }
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.close(1000, 'User requested disconnect');
+                addMessage('시스템', '연결 해제를 요청했습니다.', 'system');
+            }
         }
 
         function addMessage(sender, message, type = 'normal') {
@@ -109,14 +296,14 @@
             
             const timestamp = new Date().toLocaleTimeString();
             
-            if (type === 'system') {
-                messageElement.textContent = `[${timestamp}] ${message}`;
+            if (type === 'system' || type === 'error' || type === 'debug') {
+                messageElement.innerHTML = `<span style="color: #6c757d;">[${timestamp}]</span> <strong>[${sender}]</strong> ${message}`;
             } else if (type === 'join' || type === 'leave') {
-                messageElement.textContent = `[${timestamp}] ${message}`;
+                messageElement.innerHTML = `<span style="color: #6c757d;">[${timestamp}]</span> ${message}`;
             } else if (type === 'whisper') {
-                messageElement.textContent = `[${timestamp}] [귓속말] ${sender}: ${message}`;
+                messageElement.innerHTML = `<span style="color: #6c757d;">[${timestamp}]</span> <strong>[귓속말] ${sender}:</strong> ${message}`;
             } else {
-                messageElement.textContent = `[${timestamp}] ${sender}: ${message}`;
+                messageElement.innerHTML = `<span style="color: #6c757d;">[${timestamp}]</span> <strong>${sender}:</strong> ${message}`;
             }
             
             messageArea.appendChild(messageElement);
@@ -128,13 +315,33 @@
             
             const message = messageInput.value.trim();
             if (message && socket && socket.readyState === WebSocket.OPEN) {
+                addMessage('디버그', `전송할 메시지: "${message}"`, 'debug');
                 socket.send(message);
                 messageInput.value = '';
+            } else if (!message) {
+                addMessage('오류', '메시지를 입력하세요.', 'error');
+            } else if (!socket || socket.readyState !== WebSocket.OPEN) {
+                addMessage('오류', '서버에 연결되지 않았습니다.', 'error');
             }
         });
 
-        // 페이지 로드 시 연결
-        connect();
+        // Enter 키 이벤트
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                messageForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // 페이지 언로드 시 연결 정리
+        window.addEventListener('beforeunload', function() {
+            if (socket) {
+                socket.close();
+            }
+        });
+
+        // 페이지 로드 시 자동 연결하지 않음 (수동으로 연결 버튼 클릭)
+        addMessage('시스템', '연결 버튼을 클릭해서 서버에 연결하세요.', 'system');
     </script>
 </body>
 </html>

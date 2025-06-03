@@ -37,7 +37,7 @@ public:
 private:
     // 구성 요소
     std::unique_ptr<WebSocketServer> ws_server_;
-    std::unique_ptr<ChatRoom> chat_room_;
+    std::shared_ptr<ChatRoom> chat_room_;
     std::shared_ptr<DatabaseManager> db_manager_;
     std::unique_ptr<ChatRepository> chat_repository_;
 

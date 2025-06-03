@@ -51,7 +51,7 @@ bool ChatServerImpl::Initialize() {
         }
 
         // ChatRoom 인스턴스 생성
-        chat_room_ = std::make_unique<ChatRoom>();
+        chat_room_ = std::make_shared<ChatRoom>();
         if (!chat_room_->initialize()) {
             ConsoleHelper::Error("[ChatServer] 채팅방 초기화 실패");
             return false;
@@ -59,6 +59,9 @@ bool ChatServerImpl::Initialize() {
 
         // WebSocketServer 인스턴스 생성
         ws_server_ = std::make_unique<WebSocketServer>(config_);
+
+        // WebSocketServer에 ChatRoom 설정
+        ws_server_->setChatRoom(chat_room_);
 
         // 클라이언트 연결/해제 콜백 설정
         ws_server_->setOnClientConnected([this](std::shared_ptr<Session> session) {
@@ -268,25 +271,8 @@ void ChatServerImpl::onClientConnected(std::shared_ptr<Session> session) {
     if (!session) return;
 
     try {
-        // 고유 ID 할당
-        int userId = chat_room_->generateUserId();
-        std::string nickname = "User" + std::to_string(userId);
-        session->setNickname(nickname);
-
-        // 채팅방에 참가
-        chat_room_->join(session);
-
-        // 입장 메시지 브로드캐스트
-        auto join_msg = ChatMessage::createJoinMessage(nickname);
-        chat_room_->broadcast(join_msg.toJson());
-
-        // Welcome 메세지 전송
-        auto welcome_msg = ChatMessage::createSystemMessage(
-            "환영합니다! 현재 " + std::to_string(chat_room_->getSessionCount()) + "명이 접속 중입니다.\n"
-            "명령어 안내: /nick [새닉네임] - 닉네임 변경, /help - 도움말");
-        session->send(welcome_msg.toJson());
-
-        log("클라이언트 연결: " + nickname);
+        // 단순히 로그만 남김 (ChatRoom 입장은 Session에서 처리)
+        log("클라이언트 연결 완료: " + session->getNickname());
 
     }
     catch (const std::exception& e) {
@@ -300,12 +286,17 @@ void ChatServerImpl::onClientDisconnected(std::shared_ptr<Session> session) {
     try {
         std::string nickname = session->getNickname();
 
-        // 퇴장 메시지 브로드캐스트
-        auto leave_msg = ChatMessage::createLeaveMessage(nickname);
-        chat_room_->broadcast(leave_msg.toJson(), session);
+        // 퇴장 메시지 브로드캐스트 (Session에서 이미 처리되므로 여기서는 제거)
+        // auto leave_msg = ChatMessage::createLeaveMessage(nickname);
+        // chat_room_->broadcast(leave_msg.toJson(), session);
 
-        // 채팅방에서 제거
-        chat_room_->leave(session);
+        // 채팅방에서 제거 (Session에서 이미 처리되므로 여기서는 제거)
+        // chat_room_->leave(session);
+
+        // WebSocketServer의 연결 카운트 감소
+        if (ws_server_) {
+            ws_server_->decrementConnectionCount();
+        }
 
         log("클라이언트 연결 종료: " + nickname);
 

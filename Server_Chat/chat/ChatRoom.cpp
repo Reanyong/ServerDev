@@ -22,13 +22,13 @@ bool ChatRoom::initialize() {
         try {
             auto& db = DatabaseManager::getInstance();
             
-            auto result = db.executeQuery("SELECT id FROM Chats WHERE chat_name = '기본 채팅방' LIMIT 1");
+            auto result = db.executeQuery("SELECT id FROM chats WHERE chat_name = '기본 채팅방' LIMIT 1");
 
             if (result.empty()) {
                 // 트랜잭션으로 채팅방 생성
                 bool success = db.executeTransaction([&](pqxx::work& txn) {
                     pqxx::result insert_result = txn.exec(
-                        "INSERT INTO Chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
+                        "INSERT INTO chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
                     );
                     if (!insert_result.empty()) {
                         chat_id_ = insert_result[0][0].as<int>();

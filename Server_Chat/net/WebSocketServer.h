@@ -17,6 +17,7 @@ using tcp = net::ip::tcp;
 
 // 전방 선언
 class Session;
+class ChatRoom;
 
 class WebSocketServer {
 public:
@@ -34,6 +35,20 @@ public:
     void setOnClientConnected(ConnectionCallback callback) { onClientConnected_ = callback; }
     void setOnClientDisconnected(ConnectionCallback callback) { onClientDisconnected_ = callback; }
 
+    // ChatRoom 설정
+    void setChatRoom(std::shared_ptr<ChatRoom> chat_room) { chat_room_ = chat_room; }
+
+    // 연결 관리
+    void decrementConnectionCount() { 
+        if (connection_count_ > 0) {
+            connection_count_--;
+        }
+    }
+    
+    // 세션 관리
+    void registerSession(std::shared_ptr<Session> session);
+    void unregisterSession(std::shared_ptr<Session> session);
+
     // 서버 상태 정보
     size_t getConnectionCount() const { return connection_count_; }
     std::string getServerAddress() const;
@@ -44,6 +59,9 @@ private:
     std::string address_;
     uint16_t port_;
     int thread_count_;
+
+    // 채팅방 참조
+    std::shared_ptr<ChatRoom> chat_room_;
 
     // Boost.Asio 관련
     std::unique_ptr<net::io_context> ioc_;

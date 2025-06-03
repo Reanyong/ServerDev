@@ -9,9 +9,11 @@
 #include <mutex>
 #include <queue>
 #include <atomic>
+#include "../chat/ChatRoom.h"
 
 // 전방 선언
 class ChatRoom;
+class WebSocketServer;
 
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
@@ -21,7 +23,7 @@ using tcp = net::ip::tcp;
 class Session : public std::enable_shared_from_this<Session> {
 public:
     // 생성자/소멸자
-    explicit Session(tcp::socket socket);
+    explicit Session(tcp::socket socket, std::shared_ptr<ChatRoom> chat_room, std::weak_ptr<WebSocketServer> ws_server = {});
     ~Session();
 
     // 세션 제어
@@ -50,6 +52,8 @@ public:
     bool isClosing() const { return closing_; }
 
 private:
+    std::shared_ptr<ChatRoom> chat_room_;
+    std::weak_ptr<WebSocketServer> ws_server_;  // WebSocketServer에 대한 약한 참조
     // WebSocket 관련
     websocket::stream<beast::tcp_stream> ws_;
     beast::flat_buffer buffer_;

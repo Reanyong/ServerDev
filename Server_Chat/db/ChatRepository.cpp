@@ -20,7 +20,7 @@ ChatRepository::ChatRepository(DatabaseManager& dbManager)
 int ChatRepository::createChatRoom(const std::string& chatName) {
     try {
         auto result = db_manager_.executeQuery(
-            "INSERT INTO Chats (chat_name, created_at) VALUES ('" +
+            "INSERT INTO chats (chat_name, created_at) VALUES ('" +
             chatName + "', NOW()) RETURNING id");
 
         if (!result.empty()) {
@@ -38,7 +38,7 @@ int ChatRepository::createChatRoom(const std::string& chatName) {
 std::optional<int> ChatRepository::findChatRoomByName(const std::string& chatName) {
     try {
         auto result = db_manager_.executeQuery(
-            "SELECT id FROM Chats WHERE chat_name = '" + chatName + "' LIMIT 1");
+            "SELECT id FROM chats WHERE chat_name = '" + chatName + "' LIMIT 1");
 
         if (!result.empty()) {
             return result[0][0].as<int>();
@@ -55,7 +55,7 @@ std::optional<int> ChatRepository::findChatRoomByName(const std::string& chatNam
 bool ChatRepository::updateChatRoom(int chatId, const std::string& newName) {
     try {
         auto result = db_manager_.executeQuery(
-            "UPDATE Chats SET chat_name = '" + newName +
+            "UPDATE chats SET chat_name = '" + newName +
             "' WHERE id = " + std::to_string(chatId));
 
         return true;
@@ -71,11 +71,11 @@ bool ChatRepository::deleteChatRoom(int chatId) {
     try {
         // 관련 메시지 먼저 삭제
         db_manager_.executeQuery(
-            "DELETE FROM Messages WHERE chat_id = " + std::to_string(chatId));
+            "DELETE FROM messages WHERE chat_id = " + std::to_string(chatId));
 
         // 채팅방 삭제
         db_manager_.executeQuery(
-            "DELETE FROM Chats WHERE id = " + std::to_string(chatId));
+            "DELETE FROM chats WHERE id = " + std::to_string(chatId));
 
         return true;
     }
@@ -91,7 +91,7 @@ std::string ChatRepository::registerUser(const std::string& username, const std:
         // UUID 생성
         std::string userId = generateUUID();
 
-        std::string query = "INSERT INTO Users (id, username, email, created_at) VALUES ('" +
+        std::string query = "INSERT INTO users (id, username, email, created_at) VALUES ('" +
             userId + "', '" + username + "', '" +
             email + "', NOW())";
 
@@ -108,7 +108,7 @@ std::string ChatRepository::registerUser(const std::string& username, const std:
 std::optional<std::string> ChatRepository::findUserByUsername(const std::string& username) {
     try {
         auto result = db_manager_.executeQuery(
-            "SELECT id FROM Users WHERE username = '" + username + "' LIMIT 1");
+            "SELECT id FROM users WHERE username = '" + username + "' LIMIT 1");
 
         if (!result.empty()) {
             return result[0][0].as<std::string>();
@@ -125,7 +125,7 @@ std::optional<std::string> ChatRepository::findUserByUsername(const std::string&
 bool ChatRepository::updateUserUsername(const std::string& userId, const std::string& newUsername) {
     try {
         db_manager_.executeQuery(
-            "UPDATE Users SET username = '" + newUsername +
+            "UPDATE users SET username = '" + newUsername +
             "' WHERE id = '" + userId + "'");
 
         return true;
@@ -142,7 +142,7 @@ std::string ChatRepository::createSession(const std::string& userId, const std::
         // UUID 생성
         std::string sessionId = generateUUID();
 
-        std::string query = "INSERT INTO Sessions (session_id, user_id, status, created_at) VALUES ('" +
+        std::string query = "INSERT INTO sessions (session_id, user_id, status, created_at) VALUES ('" +
             sessionId + "', '" + userId + "', '" + status + "', NOW())";
 
         db_manager_.executeQuery(query);
@@ -158,7 +158,7 @@ std::string ChatRepository::createSession(const std::string& userId, const std::
 bool ChatRepository::updateSessionStatus(const std::string& userId, const std::string& status) {
     try {
         db_manager_.executeQuery(
-            "UPDATE Sessions SET status = '" + status +
+            "UPDATE sessions SET status = '" + status +
             "' WHERE user_id = '" + userId + "' AND status = 'active'");
 
         return true;
@@ -173,7 +173,7 @@ bool ChatRepository::updateSessionStatus(const std::string& userId, const std::s
 bool ChatRepository::endAllActiveSessions(const std::string& userId) {
     try {
         db_manager_.executeQuery(
-            "UPDATE Sessions SET status = 'ended' WHERE user_id = '" +
+            "UPDATE sessions SET status = 'ended' WHERE user_id = '" +
             userId + "' AND status = 'active'");
 
         return true;
@@ -190,7 +190,7 @@ bool ChatRepository::saveMessage(const ChatMessage& message, int chatId, const s
         std::string messageJson = message.toJson();
         std::string effectiveUserId = userId.empty() ? "NULL" : "'" + userId + "'";
 
-        std::string query = "INSERT INTO Messages (chat_id, user_id, message, created_at) VALUES (" +
+        std::string query = "INSERT INTO messages (chat_id, user_id, message, created_at) VALUES (" +
             std::to_string(chatId) + ", " + effectiveUserId + ", '" +
             messageJson + "', NOW())";
 
@@ -208,8 +208,8 @@ std::vector<ChatMessage> ChatRepository::getRecentMessages(int chatId, int limit
     std::vector<ChatMessage> messages;
     try {
         std::string query = "SELECT m.id, m.message, m.created_at, u.username "
-            "FROM Messages m "
-            "LEFT JOIN Users u ON m.user_id = u.id "
+            "FROM messages m "
+            "LEFT JOIN users u ON m.user_id = u.id "
             "WHERE m.chat_id = " + std::to_string(chatId) + " "
             "ORDER BY m.created_at DESC LIMIT " + std::to_string(limit);
 
@@ -230,8 +230,8 @@ std::vector<ChatMessage> ChatRepository::getUserMessages(const std::string& user
     std::vector<ChatMessage> messages;
     try {
         std::string query = "SELECT m.id, m.message, m.created_at, u.username "
-            "FROM Messages m "
-            "JOIN Users u ON m.user_id = u.id "
+            "FROM messages m "
+            "JOIN users u ON m.user_id = u.id "
             "WHERE m.user_id = '" + userId + "' "
             "ORDER BY m.created_at DESC LIMIT " + std::to_string(limit);
 
@@ -251,7 +251,7 @@ std::vector<ChatMessage> ChatRepository::getUserMessages(const std::string& user
 int ChatRepository::getActiveUserCount() {
     try {
         auto result = db_manager_.executeQuery(
-            "SELECT COUNT(DISTINCT user_id) FROM Sessions WHERE status = 'active'");
+            "SELECT COUNT(DISTINCT user_id) FROM sessions WHERE status = 'active'");
 
         if (!result.empty()) {
             return result[0][0].as<int>();
@@ -269,8 +269,8 @@ std::vector<std::tuple<std::string, int>> ChatRepository::getTopChatters(int lim
     std::vector<std::tuple<std::string, int>> result;
     try {
         std::string query = "SELECT u.username, COUNT(m.id) as message_count "
-            "FROM Users u "
-            "JOIN Messages m ON u.id = m.user_id "
+            "FROM users u "
+            "JOIN messages m ON u.id = m.user_id "
             "GROUP BY u.username "
             "ORDER BY message_count DESC LIMIT " + std::to_string(limit);
 
@@ -312,9 +312,9 @@ bool ChatRepository::isTableExists(const std::string& tableName) {
 bool ChatRepository::createTablesIfNotExist() {
     try {
         // Users 테이블
-        if (!isTableExists("Users")) {
+        if (!isTableExists("users")) {
             db_manager_.executeQuery(
-                "CREATE TABLE Users ("
+                "CREATE TABLE users ("
                 "id UUID PRIMARY KEY, "
                 "username VARCHAR(50) UNIQUE, "
                 "email VARCHAR(100), "
@@ -323,9 +323,9 @@ bool ChatRepository::createTablesIfNotExist() {
         }
 
         // Chats 테이블
-        if (!isTableExists("Chats")) {
+        if (!isTableExists("chats")) {
             db_manager_.executeQuery(
-                "CREATE TABLE Chats ("
+                "CREATE TABLE chats ("
                 "id SERIAL PRIMARY KEY, "
                 "chat_name VARCHAR(100), "
                 "created_at TIMESTAMPTZ"
@@ -333,23 +333,23 @@ bool ChatRepository::createTablesIfNotExist() {
         }
 
         // Sessions 테이블
-        if (!isTableExists("Sessions")) {
+        if (!isTableExists("sessions")) {
             db_manager_.executeQuery(
-                "CREATE TABLE Sessions ("
+                "CREATE TABLE sessions ("
                 "session_id UUID PRIMARY KEY, "
-                "user_id UUID REFERENCES Users(id), "
+                "user_id UUID REFERENCES users(id), "
                 "status VARCHAR(20), "
                 "created_at TIMESTAMPTZ"
                 ")");
         }
 
         // Messages 테이블
-        if (!isTableExists("Messages")) {
+        if (!isTableExists("messages")) {
             db_manager_.executeQuery(
-                "CREATE TABLE Messages ("
+                "CREATE TABLE messages ("
                 "id SERIAL PRIMARY KEY, "
-                "chat_id INT REFERENCES Chats(id), "
-                "user_id UUID REFERENCES Users(id), "
+                "chat_id INT REFERENCES chats(id), "
+                "user_id UUID REFERENCES users(id), "
                 "message TEXT, "
                 "created_at TIMESTAMPTZ"
                 ")");

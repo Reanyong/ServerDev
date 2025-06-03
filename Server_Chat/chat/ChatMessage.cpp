@@ -85,26 +85,24 @@ bool ChatMessage::saveToDatabase(int chat_id, const std::string& user_id) const 
             if (user_id.empty()) {
                 // user_id가 없는 경우 (시스템 메시지 등)
                 txn.exec(
-                    "INSERT INTO Messages (chat_id, user_id, message, created_at, message_type, source) "
+                    "INSERT INTO messages (chat_id, user_id, message, created_at, source) "
                     "VALUES ("
                     + txn.quote(chat_id) + ", "
                     + "NULL, "
                     + txn.quote(content_) + ", "
                     + txn.quote(timestamp_) + "::timestamptz, "
-                    + txn.quote(static_cast<int>(type_)) + ", "
                     + "'cpp')"
                 );
             }
             else {
                 // user_id가 있는 경우
                 txn.exec(
-                    "INSERT INTO Messages (chat_id, user_id, message, created_at, message_type, source) "
+                    "INSERT INTO messages (chat_id, user_id, message, created_at, source) "
                     "VALUES ("
                     + txn.quote(chat_id) + ", "
                     + txn.quote(user_id) + "::uuid, "
                     + txn.quote(content_) + ", "
                     + txn.quote(timestamp_) + "::timestamptz, "
-                    + txn.quote(static_cast<int>(type_)) + ", "
                     + "'cpp')"
                 );
             }
