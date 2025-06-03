@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 채팅 테스트</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #messages {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        #messageInput {
+            width: 70%;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 15px;
+            margin-left: 10px;
+        }
+        .system {
+            color: blue;
+            font-style: italic;
+        }
+        .join {
+            color: green;
+        }
+        .leave {
+            color: red;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        #connectionStatus {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .connected {
+            color: green;
+        }
+        .disconnected {
+            color: red;
+        }
+        .debug {
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket 채팅 테스트</h1>
+    
+    <div id="connectionStatus" class="disconnected">연결 안됨</div>
+    
+    <div>
+        <button onclick="connect()">연결</button>
+        <button onclick="disconnect()">연결 해제</button>
+        <button onclick="changeNick()">닉네임 변경</button>
+    </div>
+    
+    <div id="messages"></div>
+    
+    <div>
+        <input type="text" id="messageInput" placeholder="메시지를 입력하세요..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()">전송</button>
+    </div>
+
+    <script>
+        let ws = null;
+        
+        function updateStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            if (connected) {
+                status.textContent = '연결됨';
+                status.className = 'connected';
+            } else {
+                status.textContent = '연결 안됨';
+                status.className = 'disconnected';
+            }
+        }
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('이미 연결되어 있습니다.', 'error');
+                return;
+            }
+            
+            addMessage('서버 연결 시도 중...', 'debug');
+            
+            try {
+                ws = new WebSocket('ws://localhost:8080');
+                
+                ws.onopen = function() {
+                    addMessage('서버에 연결되었습니다.', 'system');
+                    updateStatus(true);
+                };
+                
+                ws.onmessage = function(event) {
+                    addMessage('원본 데이터: ' + event.data, 'debug');
+                    
+                    try {
+                        const message = JSON.parse(event.data);
+                        let messageClass = '';
+                        let displayText = '';
+                        
+                        switch(message.type) {
+                            case 0: // JOIN
+                                messageClass = 'join';
+                                displayText = `[${message.timestamp}] ${message.content}`;
+                                break;
+                            case 1: // LEAVE
+                                messageClass = 'leave';
+                                displayText = `[${message.timestamp}] ${message.content}`;
+                                break;
+                            case 2: // CHAT
+                                displayText = `[${message.timestamp}] ${message.nickname}: ${message.content}`;
+                                break;
+                            case 3: // SYSTEM
+                                messageClass = 'system';
+                                displayText = `[${message.timestamp}] 시스템: ${message.content}`;
+                                break;
+                            default:
+                                displayText = `[${message.timestamp}] ${message.nickname || 'Unknown'}: ${message.content}`;
+                        }
+                        
+                        addMessage(displayText, messageClass);
+                    } catch (e) {
+                        addMessage('JSON 파싱 오류: ' + e.message, 'error');
+                        addMessage('받은 데이터: ' + event.data, 'debug');
+                    }
+                };
+                
+                ws.onerror = function(error) {
+                    addMessage('연결 오류: ' + JSON.stringify(error), 'error');
+                    updateStatus(false);
+                };
+                
+                ws.onclose = function(event) {
+                    addMessage(`서버와의 연결이 끊어졌습니다. (코드: ${event.code}, 이유: ${event.reason})`, 'system');
+                    updateStatus(false);
+                };
+            } catch (e) {
+                addMessage('WebSocket 생성 오류: ' + e.message, 'error');
+            }
+        }
+        
+        function disconnect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                addMessage('연결되어 있지 않습니다.', 'error');
+            }
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('전송: ' + message, 'debug');
+                ws.send(message);
+                input.value = '';
+            } else {
+                addMessage('서버에 연결되어 있지 않습니다.', 'error');
+            }
+        }
+        
+        function changeNick() {
+            const newNick = prompt('새 닉네임을 입력하세요:');
+            if (newNick && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('/nick ' + newNick);
+                addMessage('닉네임 변경 요청: ' + newNick, 'debug');
+            }
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function addMessage(message, className) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            if (className) {
+                messageDiv.className = className;
+            }
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // 페이지 로드 시 자동 연결
+        window.onload = function() {
+            addMessage('채팅 테스트 클라이언트가 준비되었습니다.', 'system');
+            // 자동 연결 제거 - 수동으로 연결 버튼 클릭
+        };
+    </script>
+</body>
+</html>

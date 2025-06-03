@@ -13,6 +13,21 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="db">
+      <UniqueIdentifier>{0a929b90-792c-4995-80ef-187cb5a09037}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="utils">
+      <UniqueIdentifier>{132b9296-9c2f-4df1-a740-4b8b7aa39360}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="config">
+      <UniqueIdentifier>{1008112d-6bcd-45a9-bc01-6cfbbd044daa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="net">
+      <UniqueIdentifier>{d09efadd-68ac-4472-aa8e-9002738840a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="chat">
+      <UniqueIdentifier>{b9f7160b-b22f-477a-a678-1bc249e68baa}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="echo_websocket.cpp">
@@ -27,5 +42,76 @@
     <ClCompile Include="broadcast_websocket.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="db_integration_chat.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="db\ChatRepository.cpp">
+      <Filter>db</Filter>
+    </ClCompile>
+    <ClCompile Include="db\DatabaseManager.cpp">
+      <Filter>db</Filter>
+    </ClCompile>
+    <ClCompile Include="chat\ChatMessage.cpp">
+      <Filter>chat</Filter>
+    </ClCompile>
+    <ClCompile Include="chat\ChatRoom.cpp">
+      <Filter>chat</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\ConsoleHelper.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\StringUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="net\Session.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\WebSocketServer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="config\ServerConfig.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatServerImpl.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="db\ChatRepository.h">
+      <Filter>db</Filter>
+    </ClInclude>
+    <ClInclude Include="db\DatabaseManager.h">
+      <Filter>db</Filter>
+    </ClInclude>
+    <ClInclude Include="chat\ChatMessage.h">
+      <Filter>chat</Filter>
+    </ClInclude>
+    <ClInclude Include="chat\ChatRoom.h">
+      <Filter>chat</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\ConsoleHelper.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\StringUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="net\Session.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\WebSocketServer.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="config\ServerConfig.h">
+      <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="ChatServerImpl.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="IChatServer.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
