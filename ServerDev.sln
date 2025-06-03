@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Server_Chat", "Server_Chat\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TEST_Server_Chat", "TEST_Server_Chat\TEST_Server_Chat.vcxproj", "{A7295CF8-72A5-4A91-B334-5A0B89E9C514}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Server_API", "Server_API\Server_API.vcxproj", "{81E17CC9-06BE-41FC-A71F-A023B54FDE85}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -45,8 +47,15 @@ Global
 		{A7295CF8-72A5-4A91-B334-5A0B89E9C514}.Debug|x64.Build.0 = Debug|x64
 		{A7295CF8-72A5-4A91-B334-5A0B89E9C514}.Release|x64.ActiveCfg = Release|x64
 		{A7295CF8-72A5-4A91-B334-5A0B89E9C514}.Release|x64.Build.0 = Release|x64
+		{81E17CC9-06BE-41FC-A71F-A023B54FDE85}.Debug|x64.ActiveCfg = Debug|x64
+		{81E17CC9-06BE-41FC-A71F-A023B54FDE85}.Debug|x64.Build.0 = Debug|x64
+		{81E17CC9-06BE-41FC-A71F-A023B54FDE85}.Release|x64.ActiveCfg = Release|x64
+		{81E17CC9-06BE-41FC-A71F-A023B54FDE85}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D6E2337D-B8FD-4F56-B11C-DA4AD171C38C}
 	EndGlobalSection
 EndGlobal
