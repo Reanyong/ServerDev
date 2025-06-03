@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <locale>
 
 // 정적 멤버 초기화
 std::mutex ConsoleHelper::console_mutex_;
@@ -12,17 +13,59 @@ HANDLE ConsoleHelper::stderr_handle_ = GetStdHandle(STD_ERROR_HANDLE);
 
 bool ConsoleHelper::Initialize() {
     try {
-        // 콘솔 코드 페이지 설정
+        // 콘솔 코드 페이지 설정 (강화)
         SetConsoleOutputCP(CP_UTF8);
         SetConsoleCP(CP_UTF8);
 
-        // 로케일 설정
+        // 추가 콘솔 모드 설정
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+        
+        if (hOut != INVALID_HANDLE_VALUE) {
+            DWORD dwMode = 0;
+            GetConsoleMode(hOut, &dwMode);
+            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(hOut, dwMode);
+        }
+
+        if (hIn != INVALID_HANDLE_VALUE) {
+            DWORD dwMode = 0;
+            GetConsoleMode(hIn, &dwMode);
+            dwMode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+            SetConsoleMode(hIn, dwMode);
+        }
+
+        // 로케일 설정 강화
         setlocale(LC_ALL, "ko_KR.UTF-8");
+        setlocale(LC_CTYPE, "UTF-8");
+        
+        // C++ locale 설정
+        try {
+            std::locale::global(std::locale("ko_KR.UTF-8"));
+        }
+        catch (...) {
+            try {
+                std::locale::global(std::locale("Korean_Korea.UTF-8"));
+            }
+            catch (...) {
+                // 기본 로케일 사용
+                std::locale::global(std::locale(""));
+            }
+        }
 
         // 핸들 유효성 검사
         if (stdout_handle_ == INVALID_HANDLE_VALUE || stderr_handle_ == INVALID_HANDLE_VALUE) {
             std::cerr << "Console handles initialization failed" << std::endl;
             return false;
+        }
+
+        // 콘솔 폰트 설정 (UTF-8 지원)
+        CONSOLE_FONT_INFOEX fontInfo = { 0 };
+        fontInfo.cbSize = sizeof(fontInfo);
+        if (GetCurrentConsoleFontEx(stdout_handle_, FALSE, &fontInfo)) {
+            wcscpy_s(fontInfo.FaceName, L"Consolas");
+            fontInfo.FontWeight = 400;
+            SetCurrentConsoleFontEx(stdout_handle_, FALSE, &fontInfo);
         }
 
         return true;

@@ -61,7 +61,10 @@ std::string ServerConfig::getDbConnectionString() const {
         << " dbname=" << db_name_
         << " user=" << db_user_
         << " password=" << db_password_;
-    return ss.str();
+    
+    std::string conn_str = ss.str();
+    std::cout << "[DEBUG] DB 연결 문자열: " << conn_str << std::endl;
+    return conn_str;
 }
 
 std::string ServerConfig::toString() const {

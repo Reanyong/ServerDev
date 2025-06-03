@@ -38,13 +38,17 @@ bool ChatServerImpl::Initialize() {
         ConsoleHelper::Out("[ChatServer] 초기화 중...");
 
         // 데이터베이스 초기화
-        if (!initializeDatabase()) {
-            ConsoleHelper::Error("[ChatServer] 데이터베이스 초기화 실패");
-            return false;
+        bool db_success = initializeDatabase();
+        if (!db_success) {
+            ConsoleHelper::OutWithColor("[ChatServer] 데이터베이스 없이 서버 시작 (DB 기능 비활성화)", ConsoleColor::Yellow);
         }
 
-        // ChatRepository 인스턴스 생성
-        chat_repository_ = std::make_unique<ChatRepository>(*db_manager_);
+        // ChatRepository 인스턴스 생성 (DB가 있을 때만)
+        if (db_manager_) {
+            chat_repository_ = std::make_unique<ChatRepository>(*db_manager_);
+        } else {
+            ConsoleHelper::Out("[ChatServer] ChatRepository 생성 생략 (DB 없음)");
+        }
 
         // ChatRoom 인스턴스 생성
         chat_room_ = std::make_unique<ChatRoom>();
@@ -112,16 +116,100 @@ void ChatServerImpl::Stop() {
     }
 
     try {
-        log("채팅 서버 종료 중...");
+        log("채팅 서버 종료 시작...");
 
-        // WebSocketServer 종료
-        ws_server_->stop();
+        // 1. 먼저 새로운 연결을 차단하고 WebSocketServer 종료
+        if (ws_server_) {
+            try {
+                log("WebSocketServer 정지 중...");
+                ws_server_->stop();
+                log("WebSocketServer 정지 완료");
+            }
+            catch (const std::runtime_error& e) {
+                log("WebSocketServer 정지 중 runtime_error: " + std::string(e.what()));
+            }
+            catch (const std::exception& e) {
+                log("WebSocketServer 정지 중 예외: " + std::string(e.what()));
+            }
+            catch (...) {
+                log("WebSocketServer 정지 중 알 수 없는 예외");
+            }
+        }
 
-        log("채팅 서버가 종료되었습니다.");
+        // 2. 채팅방의 모든 세션 정리
+        if (chat_room_) {
+            try {
+                log("채팅방 정리 시작...");
+                // 채팅방에 종료 메시지 브로드캐스트
+                auto shutdown_msg = ChatMessage::createSystemMessage("서버가 종료됩니다. 연결이 곧 끊어집니다.");
+                chat_room_->broadcast(shutdown_msg.toJson());
+                
+                // 잠시 기다려서 메시지가 전송되도록 함
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                
+                // 모든 세션 종료
+                chat_room_->closeAllSessions();
+                log("채팅방 정리 완료");
+            }
+            catch (const std::runtime_error& e) {
+                log("채팅방 정리 중 runtime_error: " + std::string(e.what()));
+            }
+            catch (const std::exception& e) {
+                log("채팅방 정리 중 예외: " + std::string(e.what()));
+            }
+            catch (...) {
+                log("채팅방 정리 중 알 수 없는 예외");
+            }
+        }
+
+        // 3. ChatRepository 정리
+        if (chat_repository_) {
+            try {
+                log("채팅 저장소 정리 시작...");
+                chat_repository_.reset();
+                log("채팅 저장소 정리 완료");
+            }
+            catch (const std::runtime_error& e) {
+                log("채팅 저장소 정리 중 runtime_error (무시됨): " + std::string(e.what()));
+            }
+            catch (const std::exception& e) {
+                log("채팅 저장소 정리 중 예외 (무시됨): " + std::string(e.what()));
+            }
+            catch (...) {
+                log("채팅 저장소 정리 중 알 수 없는 예외 (무시됨)");
+            }
+        }
+
+        // 4. 데이터베이스 매니저 정리 (가장 마지막)
+        if (db_manager_) {
+            try {
+                log("데이터베이스 매니저 정리 시작...");
+                // Release 모드에서도 안전한 정리를 위해 단계적 접근
+                db_manager_.reset();
+                log("데이터베이스 매니저 정리 완료");
+            }
+            catch (const std::runtime_error& e) {
+                log("데이터베이스 매니저 정리 중 runtime_error (무시됨): " + std::string(e.what()));
+            }
+            catch (const std::exception& e) {
+                log("데이터베이스 매니저 정리 중 예외 (무시됨): " + std::string(e.what()));
+            }
+            catch (...) {
+                log("데이터베이스 매니저 정리 중 알 수 없는 예외 (무시됨)");
+            }
+        }
+
+        log("채팅 서버 종료 완료");
 
     }
+    catch (const std::runtime_error& e) {
+        ConsoleHelper::Error("[ChatServer] 종료 중 runtime_error: " + std::string(e.what()));
+    }
     catch (const std::exception& e) {
-        ConsoleHelper::Error("[ChatServer] 종료 중 오류: " + std::string(e.what()));
+        ConsoleHelper::Error("[ChatServer] 종료 중 예외: " + std::string(e.what()));
+    }
+    catch (...) {
+        ConsoleHelper::Error("[ChatServer] 종료 중 알 수 없는 예외");
     }
 }
 
@@ -242,24 +330,41 @@ bool ChatServerImpl::initializeDatabase() {
         // DB 연결 문자열 생성
         std::string conn_str = config_.getDbConnectionString();
 
-        // DatabaseManager 초기화
-        DatabaseManager::initialize(conn_str);
-        db_manager_ = std::shared_ptr<DatabaseManager>(&DatabaseManager::getInstance(),
-            [](DatabaseManager*) {}); // 싱글톤이므로 삭제하지 않음
+        // DatabaseManager 초기화 시도
+        try {
+            DatabaseManager::initialize(conn_str);
+            db_manager_ = std::shared_ptr<DatabaseManager>(&DatabaseManager::getInstance(),
+                [](DatabaseManager*) {}); // 싱글톤이므로 삭제하지 않음
 
-        // 연결 테스트
-        if (!db_manager_->testConnection()) {
-            ConsoleHelper::Error("[DB] 데이터베이스 연결 테스트 실패");
-            return false;
+            // 연결 테스트
+            if (!db_manager_->testConnection()) {
+                ConsoleHelper::Error("[DB] 데이터베이스 연결 테스트 실패 - DB 기능 비활성화");
+                db_manager_.reset();
+                return false; // DB 없이도 서버 동작하도록 false 반환하지만 계속 진행
+            }
+
+            ConsoleHelper::Out("[DB] 데이터베이스 연결 성공");
+            return true;
         }
-
-        ConsoleHelper::Out("[DB] 데이터베이스 연결 성공");
-        return true;
+        catch (const std::exception& e) {
+            ConsoleHelper::Error("[DB] DatabaseManager 초기화 실패: " + std::string(e.what()) + " - DB 기능 비활성화");
+            db_manager_.reset();
+            return false; // DB 없이도 서버 동작
+        }
+        catch (...) {
+            ConsoleHelper::Error("[DB] DatabaseManager 초기화 중 알 수 없는 예외 - DB 기능 비활성화");
+            db_manager_.reset();
+            return false; // DB 없이도 서버 동작
+        }
 
     }
     catch (const std::exception& e) {
-        ConsoleHelper::Error("[DB] 데이터베이스 초기화 실패: " + std::string(e.what()));
-        return false;
+        ConsoleHelper::Error("[DB] 데이터베이스 초기화 실패: " + std::string(e.what()) + " - DB 기능 비활성화");
+        return false; // DB 없이도 서버 동작
+    }
+    catch (...) {
+        ConsoleHelper::Error("[DB] 데이터베이스 초기화 중 알 수 없는 예외 - DB 기능 비활성화");
+        return false; // DB 없이도 서버 동작
     }
 }
 

@@ -26,17 +26,18 @@ DatabaseManager::DatabaseManager(const std::string& connection_string)
 
 // 소멸자
 DatabaseManager::~DatabaseManager() {
+    // pqxx 라이브러리의 디버그 모드 _Rootnode 예외 완전 방지
+    // 어떤 경우에도 명시적으로 close()를 호출하지 않음
     try {
-        if (conn_ && conn_->is_open()) {
-            // 디버그 모드 예외 발생 가능한 부분
-#ifdef NDEBUG
-            conn_->close();
-#endif
-            ConsoleHelper::Out(L"[DB] PostgreSQL 연결 종료");
+        if (conn_) {
+            // 연결 포인터만 리셋하고 자동 소멸에 맡김
+            // 명시적 close() 호출 제거
+            conn_.reset();
+            ConsoleHelper::Out(L"[DB] PostgreSQL 연결 객체 해제 완료");
         }
     }
-    catch (const std::exception& e) {
-        ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("PostgreSQL 연결 종료 실패: ") + e.what()));
+    catch (...) {
+        // 모든 예외 완전 무시 (로그도 남기지 않음)
     }
 }
 
@@ -61,7 +62,7 @@ bool DatabaseManager::testConnection() {
     try {
         std::lock_guard<std::mutex> lock(conn_mutex_);
 
-        if (!conn_->is_open()) {
+        if (!conn_ || !conn_->is_open()) {
             conn_ = std::make_unique<pqxx::connection>(connection_string_);
         }
 
@@ -76,6 +77,10 @@ bool DatabaseManager::testConnection() {
         ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("DB 연결 테스트 실패: ") + e.what()));
         return false;
     }
+    catch (...) {
+        ConsoleHelper::Error(StringUtils::Utf8ToWString("DB 연결 테스트 중 알 수 없는 예외"));
+        return false;
+    }
 }
 
 // 쿼리 실행
@@ -84,7 +89,7 @@ pqxx::result DatabaseManager::executeQuery(const std::string& query) {
     try {
         std::lock_guard<std::mutex> lock(conn_mutex_);
 
-        if (!conn_->is_open()) {
+        if (!conn_ || !conn_->is_open()) {
             conn_ = std::make_unique<pqxx::connection>(connection_string_);
         }
 
@@ -96,13 +101,17 @@ pqxx::result DatabaseManager::executeQuery(const std::string& query) {
         ConsoleHelper::Error(StringUtils::Utf8ToWString(std::string("쿼리 실행 실패: ") + e.what()));
         throw; // 쿼리 실패 시 예외 전파
     }
+    catch (...) {
+        ConsoleHelper::Error(StringUtils::Utf8ToWString("쿼리 실행 중 알 수 없는 예외"));
+        throw;
+    }
     return result;
 }
 
 // DB 연결 객체 가져오기
 pqxx::connection& DatabaseManager::getConnection() {
     std::lock_guard<std::mutex> lock(conn_mutex_);
-    if (!conn_->is_open()) {
+    if (!conn_ || !conn_->is_open()) {
         conn_ = std::make_unique<pqxx::connection>(connection_string_);
     }
     return *conn_;

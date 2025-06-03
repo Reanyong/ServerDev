@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 #include <system_error>
+#include <chrono>
+#include <thread>
 
 WebSocketServer::WebSocketServer(const ServerConfig& config)
     : address_(config.getServerAddress()),
@@ -105,14 +107,17 @@ void WebSocketServer::stop() {
         if (acceptor_ && acceptor_->is_open()) {
             beast::error_code ec;
             acceptor_->close(ec);
+            if (ec && ec != beast::errc::operation_canceled) {
+                ConsoleHelper::Error("[Server] Acceptor 닫기 실패: " + ec.message());
+            }
         }
 
-        // IO Context 중지 - 모든 비동기 작업 취소
+        // 모든 IO 작업 취소
         if (ioc_) {
             ioc_->stop();
         }
 
-        // 스레드가 종료될 때까지 대기
+        // 스레드가 종료될 때까지 대기 (타임아웃 추가)
         wait_for_threads();
 
         // 완전히 종료됨으로 설정
@@ -124,6 +129,9 @@ void WebSocketServer::stop() {
     }
     catch (const std::exception& e) {
         ConsoleHelper::Error("[Server] 서버 종료 중 오류: " + std::string(e.what()));
+        // 오류가 발생해도 상태는 리셋
+        running_ = false;
+        stopping_ = false;
     }
 }
 

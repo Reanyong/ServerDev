@@ -1,13 +1,14 @@
 ﻿// ChatRoom.cpp
 #include "ChatRoom.h"
 #include "../net/Session.h"
-#include "ChatMessage.h"
-#include "../db/DatabaseManager.h"
+#include "../chat/ChatMessage.h"
 #include "../utils/ConsoleHelper.h"
-#include <thread>
-#include <future>
+#include "../db/DatabaseManager.h"
 #include <algorithm>
-#include <sstream>
+#include <vector>
+#include <chrono>
+#include <thread>
+#include <nlohmann/json.hpp>
 
 ChatRoom::ChatRoom() : chat_id_(1), initialized_(false) {
     // 기본 생성자 - 초기화는 initialize() 메서드에서 수행
@@ -17,38 +18,56 @@ bool ChatRoom::initialize() {
     if (initialized_) return true;  // 이미 초기화되었으면 성공 반환
 
     try {
-        // 채팅방이 이미 있는지 확인하고 없으면 생성
-        auto& db = DatabaseManager::getInstance();
+        // 데이터베이스가 사용 가능한지 확인
+        try {
+            auto& db = DatabaseManager::getInstance();
+            
+            auto result = db.executeQuery("SELECT id FROM Chats WHERE chat_name = '기본 채팅방' LIMIT 1");
 
-        auto result = db.executeQuery("SELECT id FROM Chats WHERE chat_name = '기본 채팅방' LIMIT 1");
+            if (result.empty()) {
+                // 트랜잭션으로 채팅방 생성
+                bool success = db.executeTransaction([&](pqxx::work& txn) {
+                    pqxx::result insert_result = txn.exec(
+                        "INSERT INTO Chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
+                    );
+                    if (!insert_result.empty()) {
+                        chat_id_ = insert_result[0][0].as<int>();
+                    }
+                    });
 
-        if (result.empty()) {
-            // 트랜잭션으로 채팅방 생성
-            db.executeTransaction([&](pqxx::work& txn) {
-                pqxx::result insert_result = txn.exec(
-                    "INSERT INTO Chats (chat_name) VALUES ('기본 채팅방') RETURNING id"
-                );
-                if (!insert_result.empty()) {
-                    chat_id_ = insert_result[0][0].as<int>();
+                if (success) {
+                    ConsoleHelper::Out("[DB] 새 채팅방 생성 - ID: " + std::to_string(chat_id_));
+                } else {
+                    ConsoleHelper::Error("채팅방 생성 트랜잭션 실패 - 기본값 사용");
+                    chat_id_ = 1;  // 기본값 사용
                 }
-                });
-
-            ConsoleHelper::Out("[DB] 새 채팅방 생성 - ID: " + std::to_string(chat_id_));
+            }
+            else {
+                // 기존 채팅방 ID 사용
+                chat_id_ = result[0][0].as<int>();
+                ConsoleHelper::Out("[DB] 기존 채팅방 사용 - ID: " + std::to_string(chat_id_));
+            }
         }
-        else {
-            // 기존 채팅방 ID 사용
-            chat_id_ = result[0][0].as<int>();
-            ConsoleHelper::Out("[DB] 기존 채팅방 사용 - ID: " + std::to_string(chat_id_));
+        catch (...) {
+            // DB 관련 예외 발생 시 기본값으로 진행
+            ConsoleHelper::OutWithColor("[ChatRoom] DB 없이 기본 설정으로 초기화", ConsoleColor::Yellow);
+            chat_id_ = 1;
         }
 
         initialized_ = true;
         return true;
     }
     catch (const std::exception& e) {
-        ConsoleHelper::Error("채팅방 초기화 오류: " + std::string(e.what()));
-        // 초기화 실패시 기본값으로 진행
+        ConsoleHelper::Error("채팅방 초기화 오류: " + std::string(e.what()) + " - 기본값으로 진행");
         chat_id_ = 1;
-        return false;
+        initialized_ = true;  // 기본값으로라도 초기화 완료로 처리
+        return true; // 실패해도 true 반환하여 서버 계속 동작
+    }
+    catch (...) {
+        ConsoleHelper::Error("채팅방 초기화 중 알 수 없는 오류 - 기본값으로 진행");
+        chat_id_ = 1;
+        initialized_ = true;  // 기본값으로라도 초기화 완료로 처리
+        return true; // 실패해도 true 반환하여 서버 계속 동작
     }
 }
 
@@ -252,5 +271,42 @@ void ChatRoom::saveMessageToDatabase(const ChatMessage& message, const std::stri
     }
     catch (const std::exception& e) {
         ConsoleHelper::Error("[Error] 메시지 저장 스레드 생성 실패: " + std::string(e.what()));
+    }
+}
+
+void ChatRoom::closeAllSessions() {
+    std::vector<std::shared_ptr<Session>> sessions_to_close;
+    
+    // 모든 활성 세션을 복사해서 별도 벡터에 저장
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& session : sessions_) {
+            if (session && session->is_open()) {
+                sessions_to_close.push_back(session);
+            }
+        }
+    }
+
+    // 잠금 없이 세션들을 닫음
+    for (auto& session : sessions_to_close) {
+        try {
+            if (session && session->is_open()) {
+                session->close();
+                ConsoleHelper::Out("[ChatRoom] 세션 종료: " + session->getNickname());
+            }
+        }
+        catch (const std::exception& e) {
+            ConsoleHelper::Error("[ChatRoom] 세션 종료 중 예외: " + std::string(e.what()));
+        }
+    }
+
+    // 잠시 기다린 후 강제로 세션 목록 정리
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        sessions_.clear();
+        nickname_map_.clear();
+        ConsoleHelper::Out("[ChatRoom] 모든 세션이 정리되었습니다.");
     }
 }

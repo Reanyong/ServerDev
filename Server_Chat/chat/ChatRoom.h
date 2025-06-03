@@ -33,6 +33,9 @@ public:
     // 귓속말 기능 (특정 사용자에게만 메시지 전송)
     bool whisper(const std::string& targetNickname, const std::string& message, std::shared_ptr<Session> sender);
 
+    // 서버 종료 시 모든 세션 닫기
+    void closeAllSessions();
+
     // 유틸리티 함수들
     int generateUserId();
     size_t getSessionCount() const;
