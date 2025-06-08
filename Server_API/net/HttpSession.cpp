@@ -1,6 +1,8 @@
 ﻿// HttpSession.cpp
 #include "HttpSession.h"
 #include "../../Server_Chat/utils/ConsoleHelper.h"
+#include "../routes/ApiRouter.h"
+#include "../models/HttpMethod.h"
 #include <nlohmann/json.hpp>
 
 HttpSession::HttpSession(tcp::socket socket)
@@ -38,46 +40,19 @@ void HttpSession::on_read(beast::error_code ec, std::size_t bytes_transferred) {
 
 void HttpSession::handle_request() {
     std::string target = std::string(request_.target());
-    std::string method = std::string(request_.method_string());
+    HttpMethod method = HttpMethodUtils::fromBeastMethod(request_.method());
+    std::string body = request_.body();
 
-    ConsoleHelper::Out("[HTTP] " + method + " " + target);
+    ConsoleHelper::Out("[HTTP] " + HttpMethodUtils::toString(method) + " " + target);
 
-    http::response<http::string_body> response;
+    // 정적 라우터 인스턴스
+    static ApiRouter router;
 
-    // 간단한 라우팅
-    if (target == "/health") {
-        nlohmann::json json_response;
-        json_response["status"] = "ok";
-        json_response["server"] = "API Server";
-        json_response["version"] = "1.0.0";
+    // 라우터를 통해 요청 처리
+    ApiResponse api_response = router.handleRequest(method, target, body);
 
-        response = create_response(
-            http::status::ok,
-            "application/json",
-            json_response.dump());
-    }
-    else if (target == "/api/test") {
-        nlohmann::json json_response;
-        json_response["message"] = "Hello API Server!";
-        json_response["timestamp"] = std::time(nullptr);
-        json_response["method"] = method;
-
-        response = create_response(
-            http::status::ok,
-            "application/json",
-            json_response.dump());
-    }
-    else {
-        // 404 Not Found
-        nlohmann::json json_response;
-        json_response["error"] = "Not Found";
-        json_response["path"] = target;
-
-        response = create_response(
-            http::status::not_found,
-            "application/json",
-            json_response.dump());
-    }
+    // HTTP 응답으로 변환
+    http::response<http::string_body> response = api_response.toHttpResponse(request_.version());
 
     do_write(std::move(response));
 }

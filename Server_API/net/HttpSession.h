@@ -7,6 +7,9 @@
 #include <memory>
 #include <string>
 
+#include "../routes/ApiRouter.h"
+#include "../models/HttpMethod.h"
+
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
