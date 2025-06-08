@@ -136,14 +136,25 @@
     <ClCompile Include="..\Server_Chat\utils\ConsoleHelper.cpp" />
     <ClCompile Include="..\Server_Chat\utils\StringUtils.cpp" />
     <ClCompile Include="config\ApiConfig.cpp" />
+    <ClCompile Include="controllers\BaseController.cpp" />
+    <ClCompile Include="controllers\HealthController.cpp" />
+    <ClCompile Include="controllers\TestController.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="models\ApiResponse.cpp" />
     <ClCompile Include="net\HttpServer.cpp" />
     <ClCompile Include="net\HttpSession.cpp" />
+    <ClCompile Include="routes\ApiRouter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="config\ApiConfig.h" />
+    <ClInclude Include="controllers\BaseController.h" />
+    <ClInclude Include="controllers\HealthController.h" />
+    <ClInclude Include="controllers\TestController.h" />
+    <ClInclude Include="models\ApiResponse.h" />
+    <ClInclude Include="models\HttpMethod.h" />
     <ClInclude Include="net\HttpServer.h" />
     <ClInclude Include="net\HttpSession.h" />
+    <ClInclude Include="routes\ApiRouter.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

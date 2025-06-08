@@ -22,6 +22,15 @@
     <Filter Include="utils">
       <UniqueIdentifier>{0a8d2200-6361-4b8f-828d-f0c339e6c1b4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="controllers">
+      <UniqueIdentifier>{0ab0ba5c-a089-4fd9-97ac-cfb593d1a066}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="models">
+      <UniqueIdentifier>{d2ebe6de-a4d7-4ff2-b2c1-4a8e956e27c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="routes">
+      <UniqueIdentifier>{6e9396b8-eece-4585-bb2e-4f7033275659}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -42,6 +51,21 @@
     <ClCompile Include="..\Server_Chat\utils\StringUtils.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="controllers\BaseController.cpp">
+      <Filter>controllers</Filter>
+    </ClCompile>
+    <ClCompile Include="controllers\HealthController.cpp">
+      <Filter>controllers</Filter>
+    </ClCompile>
+    <ClCompile Include="controllers\TestController.cpp">
+      <Filter>controllers</Filter>
+    </ClCompile>
+    <ClCompile Include="models\ApiResponse.cpp">
+      <Filter>models</Filter>
+    </ClCompile>
+    <ClCompile Include="routes\ApiRouter.cpp">
+      <Filter>routes</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="net\HttpServer.h">
@@ -52,6 +76,24 @@
     </ClInclude>
     <ClInclude Include="config\ApiConfig.h">
       <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\BaseController.h">
+      <Filter>controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\HealthController.h">
+      <Filter>controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\TestController.h">
+      <Filter>controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="models\ApiResponse.h">
+      <Filter>models</Filter>
+    </ClInclude>
+    <ClInclude Include="models\HttpMethod.h">
+      <Filter>models</Filter>
+    </ClInclude>
+    <ClInclude Include="routes\ApiRouter.h">
+      <Filter>routes</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
